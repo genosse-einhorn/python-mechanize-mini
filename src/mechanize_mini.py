@@ -2,9 +2,9 @@ import http.cookiejar
 import urllib.request
 import urllib.error
 from urllib.parse import urljoin
+import xml.etree.ElementTree as ET
+import htmltree_mini as HT
 
-# HACK: Importing this one function under another name makes MyPy shut up
-from lxml.html import parse as htmlparse
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union
 
@@ -66,7 +66,7 @@ class Browser:
         """
         Cookie jar to use for all requests.
 
-        By default, this is a newly constructed :any:`~http.cookiejar.CookieJar`,
+        By default, this is a newly constructed :any:`http.cookiejar.CookieJar`,
         but you may replace it with your own compatible object.
         """
 
@@ -126,9 +126,9 @@ class Browser:
             redirect_to = page.headers['Refresh'].split(';')[-1].strip()
 
         if ((page.status == 200) and not (page.document.getroot() is None)
-                and len(page.document.xpath("//meta[@http-equiv='Refresh']")) > 0):
+                and len(page.document.findall(".//meta[@http-equiv='Refresh']")) > 0):
             # still not so great redirect
-            redirect_to = page.document.xpath("//meta[@http-equiv='Refresh']")[0].get('value').split(';')[-1].strip()
+            redirect_to = page.document.findall(".//meta[@http-equiv='Refresh']")[0].get('value').split(';')[-1].strip()
 
         if redirect_to:
             if maximum_redirects > 0:
@@ -156,7 +156,7 @@ class Page:
             The :any:`Browser` instance
 
         response
-            A response object as retrieved from urllib.request.urlopen()
+            A response object as retrieved from :any:`urllib.request.urlopen()`
         """
 
         self.browser = browser
@@ -173,9 +173,9 @@ class Page:
         self.url = response.geturl() # type: str
         """ The URL to this page """
 
-        self.document = htmlparse(response)
+        self.document = HT.parsehtmlbytes(response.read(), response.headers.get_content_charset()) # type: ET.ElementTree
         """
-        The parsed document, as returned from :any:`~lxml.html.parse`
+        The parsed document
         """
 
     @property
@@ -184,11 +184,21 @@ class Page:
         The base URI where relative URLs are resolved against
         """
         if not (self.document.getroot() is None):
-            bases = self.document.xpath('//base[@href]')
+            bases = self.document.findall('.//base[@href]')
             if len(bases) > 0:
                 return urljoin(self.url, bases[0].get('href'))
 
 
+        return self.url
+
+    @property
+    def base(self) -> str:
+        """ Alias for :any:`baseuri` """
+        return self.baseuri
+
+    @property
+    def uri(self) -> str:
+        """ Alias for :any:`url` """
         return self.url
 
     def open(self, url: str, **kwargs) -> 'Page':

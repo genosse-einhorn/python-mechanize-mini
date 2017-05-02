@@ -8,6 +8,7 @@ import urllib.parse, urllib.request, urllib.error
 import multiprocessing
 import time
 import random
+import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
 
@@ -72,19 +73,19 @@ class BasicTest(unittest.TestCase):
 
     def test_simplest(self):
         test = browser.open(TEST_SERVER + '/test.html')
-        self.assertEqual(test.document.getroot().text_content().strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_3xx(self):
         test = browser.open(TEST_SERVER + '/redirect?test.html')
-        self.assertEqual(test.document.getroot().text_content().strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh?test.html')
-        self.assertEqual(test.document.getroot().text_content().strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_meta_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect?/redirect-meta.html')
-        self.assertEqual(test.document.getroot().text_content().strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_too_many_redirects(self):
         with self.assertRaises(minimech.TooManyRedirectsException):
