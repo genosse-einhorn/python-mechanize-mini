@@ -17,10 +17,8 @@ test-html: test-mypy
 test: test-mypy test-mech test-html
 
 coverage:
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --source "$$(pwd -P)/src/mechanize_mini.py" test/test.py
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
-
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --source "$$(pwd -P)/src/htmltree_mini.py" test/htmltree.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/src" test/test.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src" test/htmltree.py
 	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
 
 

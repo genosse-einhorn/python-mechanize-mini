@@ -37,6 +37,13 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             self.wfile.write('there is no content'.encode('utf8'))
+        elif self.path.startswith('/show-headers'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=UTF-8')
+            self.end_headers()
+
+            for key, val in self.headers.items():
+                self.wfile.write('{0}: {1}\n'.format(key, val).encode('utf-8'))
         else:
             super().do_GET()
 
@@ -77,6 +84,8 @@ class BasicTest(unittest.TestCase):
 
     def test_simplest(self):
         test = browser.open(TEST_SERVER + '/test.html')
+        self.assertEqual(test.url, TEST_SERVER + '/test.html')
+        self.assertEqual(test.uri, TEST_SERVER + '/test.html')
         self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_3xx(self):
@@ -102,6 +111,10 @@ class BasicTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 404)
         self.assertEqual(cm.exception.page.document.getroot().text, 'there is no content')
 
+    def test_additional_headers(self):
+        test = browser.open(TEST_SERVER + '/show-headers', additional_headers={'X-Foo': 'bar'})
+        self.assertIn('X-Foo: bar', test.document.getroot().text.split('\n'))
+
 class BaseUriTest(unittest.TestCase):
     def test_implicit(self):
         # in the simplest case where no <base> tag is present
@@ -123,6 +136,44 @@ class BaseUriTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/base/relative.html')
         self.assertEqual(test.baseuri, test.base)
         self.assertEqual(test.baseuri, TEST_SERVER + '/otherdir/')
+
+class PageOpenTest(unittest.TestCase):
+    def test_absolute(self):
+        test = browser.open(TEST_SERVER + '/test.html')
+        test2 = test.open(TEST_SERVER + '/empty.html')
+        self.assertEqual(test2.url, TEST_SERVER + '/empty.html')
+
+    def test_implicit(self):
+        test = browser.open(TEST_SERVER + '/test.html')
+        test2 = test.open('empty.html')
+        self.assertEqual(test2.url, TEST_SERVER + '/empty.html')
+
+    def test_fragment(self):
+        # base uri never contains fragments
+        test = browser.open(TEST_SERVER + '/empty.html')
+        test = test.open('test.html#blabla')
+        self.assertEqual(test.uri, TEST_SERVER + '/test.html#blabla')
+
+    def test_relative_base(self):
+        test = browser.open(TEST_SERVER + '/base/relative.html')
+        test = test.open('../empty.html')
+        self.assertEqual(test.url, TEST_SERVER + '/empty.html')
+
+    def test_referer(self):
+        test = browser.open(TEST_SERVER + '/base/relative.html')
+        test2 = test.open('../show-headers')
+        self.assertIn('Referer: ' + test.url, test2.document.getroot().text.split('\n'))
+
+        # redirects with HTTP 300x should keep referer intact
+        # (not specified by W3C, but this is what every browser does)
+        test3 = test.open('../redirect?/show-headers')
+        self.assertIn('Referer: ' + test.url, str(test3.document.getroot().text or '').split('\n'))
+
+        # redirects with Refresh will change referer
+        # (also not specified by W3C and slightly inconsitent between browsers)
+        test4 = test.open('/redirect-refresh?show-headers')
+        self.assertIn('Referer: ' + TEST_SERVER + '/redirect-refresh?empty.html',
+                      test4.document.getroot().text.split('\n'))
 
 if __name__ == '__main__':
     run_test_server()

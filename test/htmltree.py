@@ -306,6 +306,9 @@ class TestFormatMisnesting(XmlEquivTest):
         self.assertHtmlEqualsXml('<div><b><i><hr>bla<div>blub</b>lala</i></div>',
             '<html><div><b><i><hr/>bla</i></b><i/><div><i><b>blub</b>lala</i></div></div></html>')
 
+    def test_for_coverage(self):
+        self.assertHtmlEqualsXmlFragment('<div><i>bla</div></i>', '<div><i>bla</i></div>')
+
 class TestCharsetDetection(unittest.TestCase):
     def assertCodecEqual(self, a, b):
         self.assertEqual(codecs.lookup(a).name, codecs.lookup(b).name)
@@ -350,6 +353,9 @@ class TestCharsetDetection(unittest.TestCase):
 
         # multiple meta tags -> only first one is evaluated
         self.assertCodecEqual(HT.detect_charset(b'<meta charset=ascii>blabla<meta charset="utf-8">'), 'cp1252')
+
+        # meta content without charset -> cp1252
+        self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv="Content-Type" content="text/html">'), 'cp1252')
 
     def test_garbage(self):
         # garbage charset -> default win1252

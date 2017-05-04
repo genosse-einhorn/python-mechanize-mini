@@ -20,7 +20,7 @@ import pprint
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence
 
 class _TreeBuildingHTMLParser(HTMLParser):
-    default_scope_els = ['applet', 'caption', 'html', 'table', 'marquee', 'object', 'template']
+    default_scope_els = ['applet', 'caption', 'table', 'marquee', 'object', 'template']
     list_scope_els = default_scope_els + ['ol', 'ul']
     button_scope_els = default_scope_els + ['button']
     block_scope_els = default_scope_els + ["button", "address", "article", "aside",
@@ -61,7 +61,11 @@ class _TreeBuildingHTMLParser(HTMLParser):
 
     def close_tag(self, tag: str) -> None:
         # close elements until we have reached the element on the stack
-        while len(self.element_stack) > 1:
+
+        # NOTE: currently, this is not called unless we have already made sure that
+        # we actually can pop this element from the stack, which means the loop
+        # condition cannot practically fail, it's just defensive programming at this point
+        while len(self.element_stack) > 1: # pragma: no branch
             e = self.element_stack.pop()
             if e.tag == tag:
                 break
@@ -196,23 +200,27 @@ class _TreeBuildingHTMLParser(HTMLParser):
         # resolved in such a way that it renders the same as if a stateful renderer
         # just passed over the stream of tags.
         if tag in self.formatting_els:
-            # ignore if we don't even have this on stack
+            # ignore if we don't even have this on the format stack
             if not (tag in (x[0] for x in self.format_stack)):
                 return
 
-            # some "harmless" cases of misnesting formatting elements can be solved by
-            # just popping formatting elements from the stack
-            # pop formatting elements off stack
-            while self.element_stack[-1].tag in self.formatting_els and self.element_stack[-1].tag != tag:
-                self.element_stack.pop()
+            # also, check if we actually have the element open right now.
+            # if we don't that means our element has been closed because of misnesting
+            if (tag in (e.tag for e in self.element_stack)):
+                # some "harmless" cases of misnesting formatting elements can be solved by
+                # just popping formatting elements from the stack
+                # pop formatting elements off stack
+                while self.element_stack[-1].tag in self.formatting_els and self.element_stack[-1].tag != tag:
+                    self.element_stack.pop()
 
-            # if we found our element, stop right here
-            if self.element_stack[-1].tag == tag:
-                self.element_stack.pop()
-            else:
-                # this is the hard case: the misnested formatting crosses block-level elements
-                # we have to move items around
-                self.close_formatting_tag(tag, next(x[1] for x in reversed(self.format_stack) if x[0] == tag))
+                # if we found our element, stop right here
+                if self.element_stack[-1].tag == tag:
+                    self.element_stack.pop()
+                else:
+                    # this is the hard case: the misnested formatting crosses block-level elements
+                    # we have to move items around
+                    # Also, coverage.py misdetects this as a branch point
+                    self.close_formatting_tag(tag, next(x[1] for x in reversed(self.format_stack) if x[0] == tag)) # pragma: no branch
 
             # remove from formatting stack
             index = len(self.format_stack) - 1 - [x[0] for x in self.format_stack][::-1].index(tag)

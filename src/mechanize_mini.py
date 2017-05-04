@@ -188,7 +188,10 @@ class Page:
         """
 
         base = self.url
-        if not (self.document.getroot() is None):
+
+        # NOTE: at the moment, the html parser cannot fail and will
+        # always return something. This is just defensive programming here
+        if not (self.document.getroot() is None): # pragma: no branch
             bases = self.document.findall('.//base[@href]')
             if len(bases) > 0:
                 base = urljoin(self.url, bases[0].get('href'))
