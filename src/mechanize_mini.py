@@ -181,15 +181,20 @@ class Page:
     @property
     def baseuri(self) -> str:
         """
-        The base URI where relative URLs are resolved against
+        The base URI which relative URLs are resolved against.
+
+        NOTE: This is always an absolute URL, even if it
+        was specified as a relative URL in the <base> tag.
         """
+
+        base = self.url
         if not (self.document.getroot() is None):
             bases = self.document.findall('.//base[@href]')
             if len(bases) > 0:
-                return urljoin(self.url, bases[0].get('href'))
+                base = urljoin(self.url, bases[0].get('href'))
 
-
-        return self.url
+        (scheme, netloc, path, query, fragment) = urllib.parse.urlsplit(base)
+        return urllib.parse.urlunsplit((scheme, netloc, path, query, None))
 
     @property
     def base(self) -> str:

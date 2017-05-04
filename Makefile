@@ -1,5 +1,5 @@
 
-.PHONY: all test test-mypy test-mech test-html
+.PHONY: all test test-mypy test-mech test-html coverage
 
 all:
 	@# do nothing
@@ -15,6 +15,14 @@ test-html: test-mypy
 	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/htmltree.py
 
 test: test-mypy test-mech test-html
+
+coverage:
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --source "$$(pwd -P)/src/mechanize_mini.py" test/test.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
+
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --source "$$(pwd -P)/src/htmltree_mini.py" test/htmltree.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
+
 
 apidocs:
 	@rm -rf docs/api

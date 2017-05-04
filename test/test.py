@@ -33,6 +33,10 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(302)
             self.send_header('Location', '/redirect-loop/{0}'.format(random.randint(0,1000)))
             self.end_headers()
+        elif self.path.startswith('/gimme4'):
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write('there is no content'.encode('utf8'))
         else:
             super().do_GET()
 
@@ -91,6 +95,34 @@ class BasicTest(unittest.TestCase):
         with self.assertRaises(minimech.TooManyRedirectsException):
             browser.open(TEST_SERVER + '/redirect-loop')
 
+    def test_error_return(self):
+        with self.assertRaises(minimech.HTTPException) as cm:
+            browser.open(TEST_SERVER + '/gimme4')
+
+        self.assertEqual(cm.exception.code, 404)
+        self.assertEqual(cm.exception.page.document.getroot().text, 'there is no content')
+
+class BaseUriTest(unittest.TestCase):
+    def test_implicit(self):
+        # in the simplest case where no <base> tag is present
+        test = browser.open(TEST_SERVER + '/test.html')
+        self.assertEqual(test.baseuri, test.base)
+        self.assertEqual(test.baseuri, TEST_SERVER + '/test.html')
+
+    def test_fragment(self):
+        # base uri never contains fragments
+        test = browser.open(TEST_SERVER + '/test.html#blabla')
+        self.assertEqual(test.baseuri, TEST_SERVER + '/test.html')
+
+    def test_absolute_base(self):
+        test = browser.open(TEST_SERVER + '/base/absolute.html')
+        self.assertEqual(test.baseuri, test.base)
+        self.assertEqual(test.baseuri, 'http://example.com/')
+
+    def test_relative_base(self):
+        test = browser.open(TEST_SERVER + '/base/relative.html')
+        self.assertEqual(test.baseuri, test.base)
+        self.assertEqual(test.baseuri, TEST_SERVER + '/otherdir/')
 
 if __name__ == '__main__':
     run_test_server()
