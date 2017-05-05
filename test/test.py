@@ -23,12 +23,26 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(302)
             self.send_header('Location', target)
             self.end_headers()
+        elif self.path.startswith('/redirect-refresh-broken'):
+            self.send_response(200)
+            # bogus refresh header is ignored
+            self.send_header('Refresh', 'dumm-dumm; url=')
+            self.end_headers()
+            self.wfile.write('Not Redirected\n'.encode('utf8'))
         elif self.path.startswith('/redirect-refresh?'):
             target = urllib.parse.unquote(self.path.split('?')[-1])
 
             self.send_response(200)
-            self.send_header('Refresh', '0; '+target)
+            self.send_header('Refresh', '0; url='+target)
             self.end_headers()
+        elif self.path.startswith('/redirect-meta?'):
+            target = urllib.parse.unquote(self.path.split('?')[-1])
+            
+            self.send_response(200)
+            self.end_headers();
+            
+            self.wfile.write('<meta http-equiv=REFRESH content="0;uRl={0}" />\n'
+                .format(target).encode('utf-8'))
         elif self.path.startswith('/redirect-loop'):
             self.send_response(302)
             self.send_header('Location', '/redirect-loop/{0}'.format(random.randint(0,1000)))
@@ -95,6 +109,11 @@ class BasicTest(unittest.TestCase):
     def test_redirect_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh?test.html')
         self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
+        
+    def test_redirect_broken_refresh(self):
+        test = browser.open(TEST_SERVER + '/redirect-refresh-broken')
+        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(),
+            'Not Redirected')
 
     def test_redirect_meta_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect?/redirect-meta.html')
@@ -172,8 +191,14 @@ class PageOpenTest(unittest.TestCase):
         # redirects with Refresh will change referer
         # (also not specified by W3C and slightly inconsitent between browsers)
         test4 = test.open('/redirect-refresh?show-headers')
-        self.assertIn('Referer: ' + TEST_SERVER + '/redirect-refresh?empty.html',
+        self.assertIn('Referer: ' + TEST_SERVER + '/redirect-refresh?show-headers',
                       test4.document.getroot().text.split('\n'))
+        
+        # same thing with <meta> refresh
+        test5 = test.open('/redirect-meta?show-headers')
+        self.assertIn('Referer: ' + TEST_SERVER + '/redirect-meta?show-headers',
+                      test5.document.getroot().text.split('\n'))
+        
 
 if __name__ == '__main__':
     run_test_server()

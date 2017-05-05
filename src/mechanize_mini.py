@@ -1,10 +1,10 @@
 import http.cookiejar
 import urllib.request
 import urllib.error
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urldefrag
+import re
 import xml.etree.ElementTree as ET
 import htmltree_mini as HT
-
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union
 
@@ -123,12 +123,25 @@ class Browser:
 
         if (page.status == 200) and (('Refresh' in page.headers)):
             # really brainded Refresh redirect
-            redirect_to = page.headers['Refresh'].split(';')[-1].strip()
+            match = re.fullmatch('\d+;\s*[uU][rR][lL]=(.+)', page.headers['Refresh'])
+            if match:
+                redirect_to = match.group(1).strip()
+            
+                # referer change
+                additional_headers = {**additional_headers, 'Referer': urldefrag(page.url).url}
 
-        if ((page.status == 200) and not (page.document.getroot() is None)
-                and len(page.document.findall(".//meta[@http-equiv='Refresh']")) > 0):
-            # still not so great redirect
-            redirect_to = page.document.findall(".//meta[@http-equiv='Refresh']")[0].get('value').split(';')[-1].strip()
+        if ((page.status == 200) and not (page.document.getroot() is None)):
+            # look for meta tag
+            for i in page.document.iter('meta'):
+                h = str(i.get('http-equiv') or '')
+                c = str(i.get('content') or '')
+                match = re.fullmatch('\d+;\s*[uU][rR][lL]=(.+)', c)
+                if match:
+                    # still shitty meta redirect
+                    redirect_to = match.group(1).strip()
+                    
+                    # referer change
+                    additional_headers = {**additional_headers, 'Referer': urldefrag(page.url).url}
 
         if redirect_to:
             if maximum_redirects > 0:
@@ -196,8 +209,7 @@ class Page:
             if len(bases) > 0:
                 base = urljoin(self.url, bases[0].get('href'))
 
-        (scheme, netloc, path, query, fragment) = urllib.parse.urlsplit(base)
-        return urllib.parse.urlunsplit((scheme, netloc, path, query, None))
+        return urldefrag(base).url
 
     @property
     def base(self) -> str:
@@ -217,7 +229,7 @@ class Page:
         is added. All additional arguments are forwarded to :any:`Browser.open`.
         """
 
-        headers = { 'Referer': self.url }
+        headers = { 'Referer': urldefrag(self.url).url }
         if ('additional_headers' in kwargs):
             for header, val in kwargs['additional_headers'].items():
                 headers[header] = val
