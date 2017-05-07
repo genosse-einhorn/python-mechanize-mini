@@ -16,6 +16,7 @@ from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 import codecs
 import pprint
+import re
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence
 
@@ -231,7 +232,8 @@ class _TreeBuildingHTMLParser(HTMLParser):
                 self.close_tag(tag)
 
     def handle_data(self, data: str) -> None:
-        if data.strip() == '':
+        # whitespace before and after <html>, <head>, <body> is ignored
+        if data.strip() == '' and self.element_stack[-1].tag == 'html':
             return
 
         self.restore_format_stack()
@@ -346,7 +348,10 @@ def parsefragmentstr(html: str) -> ET.Element:
     """
 
     et = parsehtmlstr(html)
-    if len(et.getroot()) == 1 and not(et.getroot().text) and not(et.getroot()[0].tail):
+    if (len(et.getroot()) == 1
+                and str(et.getroot().text or '').strip() == ''
+                and str(et.getroot()[0].tail or '').strip() == ''):
+        et.getroot()[0].tail = ''
         return et.getroot()[0]
     else:
         # if the fragment consisted of more than one element, this is the best
@@ -381,3 +386,25 @@ def parsehtmlbytes(html: bytes, charset:str = None) -> ET.ElementTree:
     charset = detect_charset(html, charset)
 
     return parsehtmlstr(str(html, charset, 'replace'))
+
+def text_content(element: ET.Element) -> str:
+    """
+    Convenience Function: Returns the textual content of the element,
+    with all html tags removed and whitespace-normalized.
+
+    Example
+    -------
+
+    >>> import mechanize_mini.HtmlTree as HT
+    >>> element = HT.parsefragmentstr('<p>foo <i>bar    </i>\nbaz</p>')
+    >>> HT.text_content(element)
+    'foo bar baz'
+
+    """
+
+    # let python walk the tree and get the text for us
+    c = ET.tostring(element, method='text', encoding='unicode')
+
+    # now whitespace-normalize.
+    # FIXME: is ascii enough or should we dig into unicode whitespace here?
+    return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')

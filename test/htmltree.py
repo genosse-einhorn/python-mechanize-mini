@@ -6,30 +6,34 @@ import xml.etree.ElementTree as ET
 import mechanize_mini.HtmlTree as HT
 
 class XmlEquivTest(unittest.TestCase):
-    def assertHtmlEqualsXml(self, html, xml):
+    def assertHtmlEqualsXml(self, html, xml, *, strict_whitespace=True):
         htree = HT.parsehtmlstr(html)
         xtree = ET.ElementTree(ET.fromstring(xml))
 
-        # prune empty text nodes from xml
-        for el in xtree.iter():
-            if str(el.text).strip() == '':
-                el.text = None
-            if str(el.tail).strip() == '':
-                el.tail = None
+        if not strict_whitespace:
+            # strip all texts in both trees
+            for el in xtree.iter():
+                el.text = str(el.text or '').strip()
+                el.tail = str(el.tail or '').strip()
+            for el in htree.iter():
+                el.text = str(el.text or '').strip()
+                el.tail = str(el.tail or '').strip()
 
         self.assertEqual(ET.tostring(htree.getroot()),
                          ET.tostring(xtree.getroot()))
 
-    def assertHtmlEqualsXmlFragment(self, html, xml):
+    def assertHtmlEqualsXmlFragment(self, html, xml, *, strict_whitespace=True):
         htree = ET.ElementTree(HT.parsefragmentstr(html))
         xtree = ET.ElementTree(ET.fromstring(xml))
 
-        # prune empty text nodes from xml
-        for el in xtree.iter():
-            if str(el.text).strip() == '':
-                el.text = None
-            if str(el.tail).strip() == '':
-                el.tail = None
+        if not strict_whitespace:
+            # strip all texts in both trees
+            for el in xtree.iter():
+                el.text = str(el.text or '').strip()
+                el.tail = str(el.tail or '').strip()
+            for el in htree.iter():
+                el.text = str(el.text or '').strip()
+                el.tail = str(el.tail or '').strip()
 
         self.assertEqual(ET.tostring(htree.getroot()),
                          ET.tostring(xtree.getroot()))
@@ -41,8 +45,7 @@ class BasicTest(XmlEquivTest):
 
     def test_vanilla(self):
         self.assertHtmlEqualsXml(
-            '''
-            <!DOCTYPE html>
+            '''<!DOCTYPE html>
             <html lang=en>
                 <head>
                     <title>Vanilla Example</title>
@@ -50,17 +53,13 @@ class BasicTest(XmlEquivTest):
                 <body>
                     Hello, World!
                 </body>
-            </html>
-            ''',
+            </html>''',
             '''
-            <html lang="en">
-                <head>
+            <html lang="en"><head>
                     <title>Vanilla Example</title>
-                </head>
-                <body>
+                </head><body>
                     Hello, World!
-                </body>
-            </html>
+                </body></html>
             ''')
 
     def test_implicit_html(self):
@@ -155,7 +154,7 @@ class BasicTest(XmlEquivTest):
                     </td><td>Can totally
                     </td><td>Be abused
                     </td><td>We don't care about geometry no way
-                    <table/>
+                    <table>\n                        \n                    </table>
             </td></tr></table>
             ''')
 
@@ -198,17 +197,20 @@ class ParagraphWeirdness(XmlEquivTest):
                 Bla
             </p>
             ''',
-            '''<html>
-            <p>
-                Bla
+            '''
+            <html>
+                <p>
+                    Bla
                 </p>
                 <article>
-                    Yumm<p/>ie
+                    Yumm
+                    <p/>
+                    ie
                 </article>
                 Bla
-            <p/>
-            </html>''')
-        self.assertHtmlEqualsXml(
+                <p/>
+            </html>''', strict_whitespace = False)
+        self.assertHtmlEqualsXmlFragment(
             '''
             <div>
             <ul>
@@ -222,19 +224,19 @@ class ParagraphWeirdness(XmlEquivTest):
             </ul>
             </div>
             ''',
-            '''<html>
+            '''
             <div>
-            <ul>
-                <li>
-                    <p>
-                        Some Paragraph
+                <ul>
+                    <li>
+                        <p>
+                            Some Paragraph
                         </p>
-                </li>
-                <p/>
-            </ul>
+                    </li>
+                    <p/>
+                </ul>
             </div>
-            </html>''')
-        self.assertHtmlEqualsXml(
+            ''', strict_whitespace = False)
+        self.assertHtmlEqualsXmlFragment(
             '''
             <div>
             <ul>
@@ -248,18 +250,18 @@ class ParagraphWeirdness(XmlEquivTest):
             </ul>
             </div>
             ''',
-            '''<html>
+            '''
             <div>
-            <ul>
-                <li>
-                    <p>
-                        Some Paragraph
+                <ul>
+                    <li>
+                        <p>
+                            Some Paragraph
                         </p>
-                </li>
-                <p/>
-            </ul>
+                    </li>
+                    <p/>
+                </ul>
             </div>
-            </html>''')
+            ''', strict_whitespace = False)
         self.assertHtmlEqualsXml(
             '''
             <table>
@@ -275,16 +277,15 @@ class ParagraphWeirdness(XmlEquivTest):
                     Blub
                 </td>
             </table>
-            ''', '''<html>
-            <table>
+            ''', '''<html><table>
                 <td>
                     <p>
                     Bla
                         <table>
                             <td>
                                 </td></table>
-                    </p></td></table>
-                    <p/>
+                            </p></td>
+                        </table><p/>
                     Blub
                 </html>''')
 
@@ -382,6 +383,14 @@ class TestCharsetDetection(unittest.TestCase):
 
         # cp1252 characters misinterpreted as utf-8
         self.assertHtmlEqualsXml('aüb'.encode('cp1252'), '<html>a\uFFFDb</html>', charset='utf8')
+
+class TestConvenience(unittest.TestCase):
+    def test_text_content(self):
+        content = HT.parsefragmentstr('bla')
+        self.assertEqual(HT.text_content(content), 'bla')
+
+        el = HT.parsefragmentstr('<p>bla <b>blub    </b>\n<i>hola</p>')
+        self.assertEqual(HT.text_content(el), 'bla blub hola')
 
 if __name__ == '__main__':
     unittest.main()

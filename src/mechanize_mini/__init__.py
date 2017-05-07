@@ -131,7 +131,7 @@ class Browser:
 
         if (page.status == 200) and (('Refresh' in page.headers)):
             # really brainded Refresh redirect
-            match = re.fullmatch('\d+;\s*[uU][rR][lL]=(.+)', page.headers['Refresh'])
+            match = re.fullmatch('\s*\d+\s*;\s*[uU][rR][lL]\s*=(.+)', page.headers['Refresh'])
             if match:
                 redirect_to = match.group(1).strip()
 
@@ -143,7 +143,7 @@ class Browser:
             for i in page.document.iter('meta'):
                 h = str(i.get('http-equiv') or '')
                 c = str(i.get('content') or '')
-                match = re.fullmatch('\d+;\s*[uU][rR][lL]=(.+)', c)
+                match = re.fullmatch('\s*\d+\s*;\s*[uU][rR][lL]\s*=(.+)', c)
                 if match:
                     # still shitty meta redirect
                     redirect_to = match.group(1).strip()
@@ -233,7 +233,7 @@ class Page:
         if not (self.document.getroot() is None): # pragma: no branch
             bases = self.document.findall('.//base[@href]')
             if len(bases) > 0:
-                base = urljoin(self.url, bases[0].get('href'))
+                base = urljoin(self.url, bases[0].get('href').strip())
 
         return urldefrag(base).url
 
