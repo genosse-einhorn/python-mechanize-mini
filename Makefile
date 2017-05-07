@@ -6,10 +6,10 @@ all:
 
 test-mypy:
 	@# Run MyPy
-	@mypy --check-untyped-defs --strict-optional src/*.py
+	@mypy --check-untyped-defs --strict-optional src/mechanize_mini/*.py
 
 test-mech: test-mypy
-	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/test.py
+	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/minimech.py
 
 test-html: test-mypy
 	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/htmltree.py
@@ -17,8 +17,8 @@ test-html: test-mypy
 test: test-mypy test-mech test-html
 
 coverage: test-mypy
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/src" test/test.py
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src" test/htmltree.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/src/mechanize_mini" test/minimech.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src/mechanize_mini" test/htmltree.py
 	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
 
 

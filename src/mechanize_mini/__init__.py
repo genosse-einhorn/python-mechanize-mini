@@ -4,7 +4,7 @@ import urllib.error
 from urllib.parse import urljoin, urldefrag
 import re
 import xml.etree.ElementTree as ET
-import htmltree_mini as HT
+from . import HtmlTree as HT
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union
 

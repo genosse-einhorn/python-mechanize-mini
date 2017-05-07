@@ -3,7 +3,7 @@
 import unittest
 import codecs
 import xml.etree.ElementTree as ET
-import htmltree_mini as HT
+import mechanize_mini.HtmlTree as HT
 
 class XmlEquivTest(unittest.TestCase):
     def assertHtmlEqualsXml(self, html, xml):
