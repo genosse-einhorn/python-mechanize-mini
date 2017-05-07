@@ -209,7 +209,6 @@ class _TreeBuildingHTMLParser(HTMLParser):
             if (tag in (e.tag for e in self.element_stack)):
                 # some "harmless" cases of misnesting formatting elements can be solved by
                 # just popping formatting elements from the stack
-                # pop formatting elements off stack
                 while self.element_stack[-1].tag in self.formatting_els and self.element_stack[-1].tag != tag:
                     self.element_stack.pop()
 
@@ -217,8 +216,8 @@ class _TreeBuildingHTMLParser(HTMLParser):
                 if self.element_stack[-1].tag == tag:
                     self.element_stack.pop()
                 else:
-                    # this is the hard case: the misnested formatting crosses block-level elements
-                    # we have to move items around
+                    # this is the hard case: the misnested formatting crosses block-level
+                    # elements, so we have to move items around
                     # Also, coverage.py misdetects this as a branch point
                     self.close_formatting_tag(tag, next(x[1] for x in reversed(self.format_stack) if x[0] == tag)) # pragma: no branch
 
@@ -245,7 +244,7 @@ class _TreeBuildingHTMLParser(HTMLParser):
 
 class _CharsetDetectingHTMLParser(HTMLParser):
     """
-    HTML Parser that does nothing but watch for <meta... charset tags
+    HTML Parser that does nothing but watch for ``<meta charset=... />`` tags
     """
 
     def __init__(self) -> None:
@@ -255,7 +254,7 @@ class _CharsetDetectingHTMLParser(HTMLParser):
         """The detected charset. May be :code:`None` if no charset is found"""
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, str]]) -> None:
-        if not(self.charset is None):
+        if self.charset is not None:
             return
 
         ad = dict(attrs)
@@ -267,6 +266,21 @@ class _CharsetDetectingHTMLParser(HTMLParser):
                      and ad['http-equiv'].lower() == 'content-type'
                      and ad['content'].lower().find('charset=') != -1):
                 self.charset = ad['content'].lower().split('charset=')[-1].strip()
+
+
+        # verify that we actually found a possible encoding.
+        # if the encoding is invalid, look  for the next meta tag
+        if self.charset is not None:
+            try:
+                codec = codecs.lookup(self.charset)
+                # if the meta tag says UTF-16, silently treat it as UTF-8
+                # because if we're at this point in the code, we can be
+                # sure that we have an ASCII-compatible encoding.
+                if codec.name.startswith('utf-16'):
+                    self.charset = 'utf-8'
+
+            except LookupError:
+                self.charset = None
 
 def detect_charset(html: bytes, charset: str = None) -> str:
     """
@@ -280,9 +294,11 @@ def detect_charset(html: bytes, charset: str = None) -> str:
         This will override any <meta> tag found in the document.
 
     .. note::
-        ISO-8859-1 and US-ASCII will always be changed to windows-1252
-        (this is specified by WHATWG and browsers actually do this).
-        The default encoding is windows-1252.
+        * ISO-8859-1 and US-ASCII will always be changed to windows-1252
+          (this is specified by WHATWG and browsers actually do this).
+        * Encodings which the :any:`codecs` module does not know about are
+          silently ignored.
+        * The default encoding is :code:`windows-1252`.
 
     """
 
@@ -315,7 +331,7 @@ def detect_charset(html: bytes, charset: str = None) -> str:
         charset = 'cp1252' # fallback
 
     # replace ascii codecs
-    if charset in ['latin_1', 'ascii']:
+    if charset in ['iso8859-1', 'ascii']:
         charset = 'cp1252'
 
     return charset
@@ -326,7 +342,7 @@ def parsefragmentstr(html: str) -> ET.Element:
 
     If the given fragment parses to just one element, this element
     is returned. If it parses to multiple sibling elements, a wrapping
-    <html> element will be returned.
+    ``<html>`` element will be returned.
     """
 
     et = parsehtmlstr(html)
@@ -357,7 +373,7 @@ def parsehtmlbytes(html: bytes, charset:str = None) -> ET.ElementTree:
 
     This function will also detect the encoding of the given document.
 
-    :param charset:
+    :param str charset:
         Charset information obtained via external means, e.g. HTTP header.
         This will override any <meta> tag found in the document.
     """

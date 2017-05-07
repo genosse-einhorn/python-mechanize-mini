@@ -351,11 +351,15 @@ class TestCharsetDetection(unittest.TestCase):
         self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv=Content-Type content=text/html; charset=utf8>'), 'utf-8')
         self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv="Content-Type" content="text/html; CHARSET= utf8">'), 'utf-8')
 
-        # multiple meta tags -> only first one is evaluated
+        # multiple meta tags -> only first valid one is evaluated
         self.assertCodecEqual(HT.detect_charset(b'<meta charset=ascii>blabla<meta charset="utf-8">'), 'cp1252')
+        self.assertCodecEqual(HT.detect_charset(b'<meta charset=gucklug>blabla<meta charset="utf-8">'), 'utf-8')
 
         # meta content without charset -> cp1252
         self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv="Content-Type" content="text/html">'), 'cp1252')
+
+        # meta in ASCII test with UTF-16 -> gets turned into UTF-8
+        self.assertCodecEqual(HT.detect_charset(b'<meta charset=UTF-16BE>blabla'), 'utf-8')
 
     def test_garbage(self):
         # garbage charset -> default win1252
@@ -367,6 +371,7 @@ class TestCharsetDetection(unittest.TestCase):
     def test_override(self):
         self.assertCodecEqual(HT.detect_charset(b'bla', 'utf-8'), 'utf-8')
         self.assertCodecEqual(HT.detect_charset(b'bla', 'ASCII'), 'cp1252')
+        self.assertCodecEqual(HT.detect_charset(b'bla', 'latin-1'), 'cp1252')
 
     def test_html(self):
         # standard case
