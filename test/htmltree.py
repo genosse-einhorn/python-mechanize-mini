@@ -57,7 +57,8 @@ class BasicTest(XmlEquivTest):
             '''
             <html lang="en"><head>
                     <title>Vanilla Example</title>
-                </head><body>
+                </head>
+                <body>
                     Hello, World!
                 </body></html>
             ''')
@@ -277,7 +278,8 @@ class ParagraphWeirdness(XmlEquivTest):
                     Blub
                 </td>
             </table>
-            ''', '''<html><table>
+            ''', '''<html>
+            <table>
                 <td>
                     <p>
                     Bla
@@ -285,9 +287,9 @@ class ParagraphWeirdness(XmlEquivTest):
                             <td>
                                 </td></table>
                             </p></td>
-                        </table><p/>
-                    Blub
-                </html>''')
+                        </table>
+                    <p/>
+                    Blub\n                \n            \n            </html>''')
 
 class TestFormatMisnesting(XmlEquivTest):
     def test_correct(self):

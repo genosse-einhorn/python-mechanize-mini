@@ -43,6 +43,18 @@ class _TreeBuildingHTMLParser(HTMLParser):
         self.format_stack = [] # type: List[Tuple[str, Dict[str, str]]]
 
     def finish(self) -> ET.Element:
+        # remove whitespace-only text nodes before <head>
+        if (len(self.element_stack[0]) > 0
+                and self.element_stack[0][0].tag in ['head', 'body']
+                and str(self.element_stack[0].text or '').strip() == ''):
+            self.element_stack[0].text = ''
+
+        # remove whitespace-only text after </body>
+        if (len(self.element_stack[0]) > 0
+                and self.element_stack[0][-1].tag in ['head', 'body']
+                and str(self.element_stack[-1].tail or '').strip() == ''):
+            self.element_stack[0][-1].tail = ''
+
         return self.element_stack[0]
 
     def has_in_scope(self, tag: str, scope_els: List[str]) -> bool:
@@ -232,10 +244,6 @@ class _TreeBuildingHTMLParser(HTMLParser):
                 self.close_tag(tag)
 
     def handle_data(self, data: str) -> None:
-        # whitespace before and after <html>, <head>, <body> is ignored
-        if data.strip() == '' and self.element_stack[-1].tag == 'html':
-            return
-
         self.restore_format_stack()
 
         el = self.element_stack[-1]
