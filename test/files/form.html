@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+
+<form>
+</form>
+
+<form name="withaction" id="actionwith" action="/show-post-params" method="post">
+    <input type="hidden" name="foo" value="bar" />
+
+    <select name="checker">
+        <option id="val1" value="theval">Name which is not value</option>
+        <option>Text is Value</option>
+    </select>
+
+    <textarea name="longtext">Loltext</textarea>
+</form>
+
+<form name="fileupload" action="/show-post-params" method="post" enctype="multipart/form-data">
+
+    <label for="file">File:</label>
+    <input name="file" id="file" type="file" />
+</form>

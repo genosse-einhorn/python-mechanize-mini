@@ -15,7 +15,6 @@ elements in tree (and the content will be a child of <html> directly).
 from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 import codecs
-import pprint
 import re
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence

@@ -14,11 +14,15 @@ test-mech: test-mypy
 test-html: test-mypy
 	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/htmltree.py
 
-test: test-mypy test-mech test-html
+test-forms: test-mypy
+	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/forms.py
+
+test: test-mypy test-mech test-html test-forms
 
 coverage: test-mypy
 	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/src/mechanize_mini" test/minimech.py
 	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src/mechanize_mini" test/htmltree.py
+	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src/mechanize_mini" test/forms.py
 	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
 
 

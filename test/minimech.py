@@ -3,7 +3,6 @@
 import unittest
 import os
 import os.path
-import http.server
 import urllib.parse, urllib.request, urllib.error
 import multiprocessing
 import time
@@ -12,86 +11,9 @@ import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
 
-# test http server
+import test_server
 
-class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        # For our custom redirect handlers
-        if self.path.startswith('/redirect?'):
-            target = urllib.parse.unquote(self.path.split('?')[-1])
-
-            self.send_response(302)
-            self.send_header('Location', target)
-            self.end_headers()
-        elif self.path.startswith('/redirect-refresh-broken'):
-            self.send_response(200)
-            # bogus refresh header is ignored
-            self.send_header('Refresh', 'dumm-dumm; url=')
-            self.end_headers()
-            self.wfile.write('Not Redirected\n'.encode('utf8'))
-        elif self.path.startswith('/redirect-refresh?'):
-            target = urllib.parse.unquote(self.path.split('?')[-1])
-
-            self.send_response(200)
-            self.send_header('Refresh', '0; url='+target)
-            self.end_headers()
-        elif self.path.startswith('/redirect-meta?'):
-            target = urllib.parse.unquote(self.path.split('?')[-1])
-            
-            self.send_response(200)
-            self.end_headers();
-            
-            self.wfile.write('<meta http-equiv=REFRESH content="0;uRl={0}" />\n'
-                .format(target).encode('utf-8'))
-        elif self.path.startswith('/redirect-loop'):
-            self.send_response(302)
-            self.send_header('Location', '/redirect-loop/{0}'.format(random.randint(0,1000)))
-            self.end_headers()
-        elif self.path.startswith('/gimme4'):
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write('there is no content'.encode('utf8'))
-        elif self.path.startswith('/show-headers'):
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/plain; charset=UTF-8')
-            self.end_headers()
-
-            for key, val in self.headers.items():
-                self.wfile.write('{0}: {1}\n'.format(key, val).encode('utf-8'))
-        else:
-            super().do_GET()
-
-    # custom path translator
-    def translate_path(self, path):
-        # abandon query parameters
-        path = path.split('?',1)[0]
-        path = path.split('#',1)[0]
-
-        # unquote
-        path = urllib.parse.unquote(path)
-
-        # return file path
-        path = os.path.dirname(os.path.abspath(__file__)) + '/files' + path
-        return path
-
-    # get rid of logging
-    def log_message(self, format, *args):
-        return
-
-
-PORT = 23527
-
-def run_server():
-    server_address = ('', PORT)
-    httpd = http.server.HTTPServer(server_address, TestHTTPRequestHandler)
-    httpd.serve_forever()
-
-def run_test_server():
-    p = multiprocessing.Process(target=run_server, daemon=True)
-    p.start()
-
-
-TEST_SERVER = 'http://localhost:{port}'.format(port=PORT)
+TEST_SERVER = None
 browser = minimech.Browser("MiniMech Test Suite / jonas@kuemmerlin.eu")
 
 class BasicTest(unittest.TestCase):
@@ -109,7 +31,7 @@ class BasicTest(unittest.TestCase):
     def test_redirect_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh?test.html')
         self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
-        
+
     def test_redirect_broken_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh-broken')
         self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(),
@@ -133,6 +55,38 @@ class BasicTest(unittest.TestCase):
     def test_additional_headers(self):
         test = browser.open(TEST_SERVER + '/show-headers', additional_headers={'X-Foo': 'bar'})
         self.assertIn('X-Foo: bar', test.document.getroot().text.split('\n'))
+
+class FindStuffTest(unittest.TestCase):
+    def test_find_by_tag_name(self):
+        test = browser.open(TEST_SERVER + '/form.html')
+
+        self.assertEqual(test.find_element(tag='form', n=0).tag, 'form')
+
+    def test_find_by_class(self):
+        test = browser.open(TEST_SERVER + '/elements.html')
+
+        # too many -> exception
+        with self.assertRaises(minimech.TooManyElementsFoundError):
+            test.find_element(class_name='important')
+
+        # not existing
+        with self.assertRaises(minimech.ElementNotFoundError):
+            test.find_element(class_name='nada')
+
+        # not so many
+        with self.assertRaises(minimech.ElementNotFoundError):
+            test.find_element(class_name='important', n=10)
+
+        # but the third one is ok
+        test.find_element(class_name='important', n=2)
+
+        # but there should be two of these
+        self.assertEqual(len(list(test.find_all_elements(tag='p', class_name='important'))), 2)
+
+    def test_find_by_id(self):
+        test = browser.open(TEST_SERVER + '/elements.html')
+
+        self.assertEqual(test.find_element(id='importantest').get('id'), 'importantest')
 
 class BaseUriTest(unittest.TestCase):
     def test_implicit(self):
@@ -193,22 +147,14 @@ class PageOpenTest(unittest.TestCase):
         test4 = test.open('/redirect-refresh?show-headers')
         self.assertIn('Referer: ' + TEST_SERVER + '/redirect-refresh?show-headers',
                       test4.document.getroot().text.split('\n'))
-        
+
         # same thing with <meta> refresh
         test5 = test.open('/redirect-meta?show-headers')
         self.assertIn('Referer: ' + TEST_SERVER + '/redirect-meta?show-headers',
                       test5.document.getroot().text.split('\n'))
-        
+
 
 if __name__ == '__main__':
-    run_test_server()
-
-    # wait for server to come online
-    while 1:
-        try:
-            resp = urllib.request.urlopen(TEST_SERVER + '/')
-            break
-        except urllib.error.URLError:
-            time.sleep(0.01)
+    TEST_SERVER = test_server.start_test_server()
 
     unittest.main()
