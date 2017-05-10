@@ -147,48 +147,124 @@ class Form:
         return (Input(el) for el in self.__find_input_els(
             name=name, id=id, type=type, enabled=enabled, checked=checked))
 
-    def get_value(self, name: str) -> Optional[str]:
+    def get_field(self, name: str) -> Optional[str]:
         """
-        Retrieves the value associated with the given input name.
+        Retrieves the value associated with the given field name.
 
-        .. note::
+        * If all input elements with the given name are radio buttons, the value
+          of only checked one is returned (or ``None`` if no radio button is checked).
+        * If the input with the given name is a ``<select>`` element, the value
+          of the selected option is returned (or ``None`` if no option is
+          selected).
+        * For all other elements, the ``value`` attribute is returned..
+        * If no input element with the given name exists, ``None`` is returned.
 
-            * If multiple input elements with the same name exist, the value
-              of the first one will be returned
-            * If no input element with the given name exists, ``None`` will be returned.
-            * For ``<select>`` elements, only the first selected option will be returned,
-              even if multiple options are selected. You might want to use
-              :any:`Form.find_input` and :any:`Input.get_selected_options` instead.
+        Raises
+        ------
+
+        UnsupportedFormError
+            * There is more than one input element with the same name (and they
+              are not all radio buttons)
+            * More than one option in a ``<select>`` element is selected
+            * More than one radio button is checked
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.get_selected_options` instead.
+        * If your form is particularly crazy, you might have to get your hands dirty
+          and get element attributes yourself.
 
         """
-        try:
-            return _get_input_value(next(self.__find_input_els(name=name)))
-        except StopIteration:
+        inputs = list(self.__find_input_els(name=name))
+        if len(inputs) > 1:
+            # check if they are all radio buttons
+            if any(True for x in inputs if x.get('type').lower().strip() != 'radio'):
+                raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
+                                           "and they are not all radio buttons").format(name))
+
+            # they are radio buttons, find the checked one
+            checked = [x for x in inputs if x.get('checked') != None]
+            if len(checked) == 1:
+                return checked[0].get('value')
+            elif len(checked) == 0:
+                return None
+            else:
+                raise UnsupportedFormError("Multiple radio buttons with name '{0}' are selected".format(name))
+        elif len(inputs) == 1:
+            return _get_input_value(inputs[0])
+        else:
             return None
 
-    def set_value(self, name: str, value: str) -> None:
+    def set_field(self, name: str, value: str) -> None:
         """
         Sets the value associated with the given input name
 
-        .. note::
+        * If all input elements with the given name are radio buttons,
+          the one with the given value is marked as checked and all other ones
+          will be unchecked.
+        * If the input with the given name is a ``<select>`` element, the option
+          with the given value will be selected, and all other options will be unselected
+        * For all other elements, the ``value`` attribute is changed.
 
-            * If multiple input elements with the same name exist, the value
-              of the first one will be set
-            * If no input element with the given name exists,
-              an :any:`InputNotFoundError` will be raised
-            * For ``<select>`` elements, the first option with the given value
-              will be selected, and all oter options will be deselected.
-              If no option with the given value exists, an
-              :any:`InvalidOptionError` will be raised.
+        Raises
+        ------
+
+        UnsupportedFormError
+            * There is more than one input element with the same name (and they
+              are not all radio buttons)
+            * There is no radio button with the given value
+            * There is no option with the given value in a ``<select>`` element.
+            * The input element is a checkbox (if you really want to change the
+              value attribute of a checkbox, use :any:`Input.value`).
+
+        InputNotFoundError
+            if no input element with the given name exists
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.set_selected_options` instead.
+        * If your form is particularly crazy, you might have to get your hands dirty
+          and set element attributes yourself.
+
         """
-        try:
-            return _set_input_value(next(self.__find_input_els(name=name)), value)
-        except StopIteration:
+        inputs = list(self.__find_input_els(name=name))
+        if len(inputs) > 1:
+            # check if they are all radio buttons
+            if any(True for x in inputs if x.get('type').lower().strip() != 'radio'):
+                raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
+                                           "and they are not all radio buttons").format(name))
+
+            # they are radio buttons, find the correct one to check
+            withval = [x for x in inputs if x.get('value') == value]
+            if len(withval) >= 1:
+                for i in inputs:
+                    if i.get('checked') is not None:
+                        del i.attrib['checked']
+
+                withval[0].set('checked', 'checked')
+            else:
+                raise UnsupportedFormError("No radio button with value '{0}' exists".format(value))
+        elif len(inputs) == 1:
+            return _set_input_value(inputs[0], value)
+        else:
             raise InputNotFoundError('No <input> element with name=' + name + ' found.')
 
 class InputNotFoundError(Exception):
     """
     No matching ``<input>`` element has been found
+    """
+
+class UnsupportedFormError(Exception):
+    """
+    The <form> does weird things which the called method cannot handle, e.g.:
+
+    * multiple input elements with the same name which are not radio buttons
+    * multiple select options are selected where only one is expected
+    * multiple radio buttons are selected
     """
 
 class InvalidOptionError(Exception):
@@ -211,12 +287,15 @@ class InvalidOptionError(Exception):
 
 def _get_input_value(el: ET.Element) -> Optional[str]:
     if el.tag == 'select':
-        # return first option that is selected
-        try:
-            el = next((e for e in el.iter('option') if e.get('selected') is not None))
-            return el.get('value', el.text)
-        except StopIteration:
+        # return only option that is selected
+        selected = [e for e in el.iter('option') if e.get('selected') is not None]
+
+        if len(selected) == 1:
+            return selected[0].get('value', selected[0].text)
+        elif len(selected) == 0:
             return None
+        else:
+            raise UnsupportedFormError("More than one <option> is selected")
     elif el.tag == 'textarea':
         return el.text
     else:

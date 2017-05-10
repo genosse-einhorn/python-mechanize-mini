@@ -37,10 +37,10 @@ class FormAccessorTest(unittest.TestCase):
         page = browser.open(TEST_SERVER + '/form.html')
         form = Form(list(page.document.iter('form'))[1], page)
 
-        self.assertEqual(form.get_value('foo'), 'bar')
-        self.assertEqual(form.get_value('checker'), None)
-        self.assertEqual(form.get_value('longtext'), 'Loltext')
-        self.assertEqual(form.get_value('nonexistent'), None)
+        self.assertEqual(form.get_field('foo'), 'bar')
+        self.assertEqual(form.get_field('checker'), None)
+        self.assertEqual(form.get_field('longtext'), 'Loltext')
+        self.assertEqual(form.get_field('nonexistent'), None)
 
 
     def test_input_setvalue(self):
@@ -48,34 +48,34 @@ class FormAccessorTest(unittest.TestCase):
         form = Form(list(page.document.iter('form'))[1], page)
 
         foo = next(x for x in page.find_all_elements(context=form.element) if x.get('name') == 'foo')
-        form.set_value('foo', 'baz')
+        form.set_field('foo', 'baz')
         self.assertEqual(foo.get('value'), 'baz')
 
         # <select>
 
         # set option with text
-        form.set_value('checker', 'Text is Value')
-        self.assertEqual(form.get_value('checker'), 'Text is Value')
+        form.set_field('checker', 'Text is Value')
+        self.assertEqual(form.get_field('checker'), 'Text is Value')
         self.assertEqual(page.find_element(tag='option', text='Text is Value').get('selected'), 'selected')
 
         # set option with custom value
-        form.set_value('checker', 'theval')
-        self.assertEqual(form.get_value('checker'), 'theval')
+        form.set_field('checker', 'theval')
+        self.assertEqual(form.get_field('checker'), 'theval')
         self.assertEqual(page.find_element(id='val1').get('selected'), 'selected')
 
         # set nonexistent option
         with self.assertRaises(minimech.forms.InvalidOptionError) as cm:
-            form.set_value('checker', 'bogus')
+            form.set_field('checker', 'bogus')
         self.assertEqual(cm.exception.select.tag, 'select')
         self.assertEqual(cm.exception.value, 'bogus')
 
         # nonexistent elements
         with self.assertRaises(minimech.forms.InputNotFoundError):
-            form.set_value('nonexistent', 'bla')
+            form.set_field('nonexistent', 'bla')
 
         # textarea
         txa = page.find_element(tag='textarea', context=form.element)
-        form.set_value('longtext', 'blabla')
+        form.set_field('longtext', 'blabla')
         self.assertEqual(txa.text, 'blabla')
 
 if __name__ == '__main__':
