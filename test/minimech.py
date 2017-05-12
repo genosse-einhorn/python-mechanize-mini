@@ -10,6 +10,7 @@ import random
 import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
+import mechanize_mini.HtmlTree as HT
 
 import test_server
 
@@ -66,15 +67,15 @@ class FindStuffTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/elements.html')
 
         # too many -> exception
-        with self.assertRaises(minimech.TooManyElementsFoundError):
+        with self.assertRaises(HT.TooManyElementsFoundError):
             test.find_element(class_name='important')
 
         # not existing
-        with self.assertRaises(minimech.ElementNotFoundError):
+        with self.assertRaises(HT.ElementNotFoundError):
             test.find_element(class_name='nada')
 
         # not so many
-        with self.assertRaises(minimech.ElementNotFoundError):
+        with self.assertRaises(HT.ElementNotFoundError):
             test.find_element(class_name='important', n=10)
 
         # but the third one is ok

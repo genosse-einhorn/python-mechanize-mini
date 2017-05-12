@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 import codecs
 import re
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, TypeVar
 
 class _TreeBuildingHTMLParser(HTMLParser):
     default_scope_els = ['applet', 'caption', 'table', 'marquee', 'object', 'template']
@@ -291,6 +291,7 @@ class _CharsetDetectingHTMLParser(HTMLParser):
             except LookupError:
                 self.charset = None
 
+
 def detect_charset(html: bytes, charset: str = None) -> str:
     """
     Detects the character set of the given html file.
@@ -379,6 +380,13 @@ def parsehtmlstr(html: str) -> ET.ElementTree:
     parser.close()
     return ET.ElementTree(parser.finish())
 
+def parsefile(filename: str) -> ET.ElementTree:
+    """
+    Parse a HTML file into an element tree
+    """
+    with open(filename, 'rb') as f:
+        return parsehtmlbytes(f.read())
+
 def parsehtmlbytes(html: bytes, charset:str = None) -> ET.ElementTree:
     """
     Parse a HTML document into an element tree
@@ -415,3 +423,84 @@ def text_content(element: ET.Element) -> str:
     # now whitespace-normalize.
     # FIXME: is ascii enough or should we dig into unicode whitespace here?
     return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
+
+
+
+class ElementNotFoundError(Exception):
+    """ No element has been found """
+
+class TooManyElementsFoundError(Exception):
+    """ One element was requested, but multiple were found """
+
+def find_all_elements(context: ET.Element, *, tag: str = None,
+        id: str = None, class_name: str = None, text: str = None) -> Iterator[ET.Element]:
+    """
+    Finds HTML elements which are descendants of the given context element.
+    The keyowrd arguments specify search criteria.
+
+    **tag** (:py:obj:`str`)
+        Find only elements with the given tag
+    **id** (:py:obj:`str`)
+        Find only elements with the given ``id`` attribute
+    **class_name** (:py:obj:`str`)
+        Find only elements where the ``class`` attribute contains the given class
+    **text** (:py:obj:`str`)
+        Find only elements where the whitespace-normalized text content
+        (as returned by :any:`mechanize_mini.HtmlTree.text_content`)
+        equals the given text.
+    """
+
+    if tag is not None:
+        l = context.iter(tag)
+    else:
+        l = context.iter()
+
+    for el in l:
+        if id is not None:
+            if el.get('id') != id:
+                continue
+
+        if class_name is not None:
+            if class_name not in el.get('class', '').split():
+                continue
+
+        if text is not None:
+            if text_content(el) != text:
+                continue
+
+        yield el
+
+def find_element(context: ET.Element, n: int = None, **kwargs) -> ET.Element:
+    return _get_exactly_one(find_all_elements(context, **kwargs), n)
+
+def HTML(text: str) -> ET.Element:
+    """
+    Parses a HTML section from a string constant. This function can be used to embed "HTML literals"" in Python code
+    """
+    return parsefragmentstr(text)
+
+
+TElement = TypeVar('TElement')
+def _get_exactly_one(els: Iterator[TElement], n: int = None) -> TElement:
+    # write complicated code here to not traverse the iterator more than necessary
+    try:
+        first = next(els)
+    except StopIteration:
+        raise ElementNotFoundError("Expected (at least) one element, got none")
+
+    if n is None:
+        try:
+            next(els)
+            raise TooManyElementsFoundError("Expected exactly one element, found a second one")
+        except StopIteration:
+            return first
+    else:
+        retval = first
+        for i in range(1, n+1):
+            try:
+                retval = next(els)
+            except StopIteration:
+                raise ElementNotFoundError(
+                    "Tried to retrieve element {n}, but found only {i}".format(n=n, i=i))
+
+        return retval

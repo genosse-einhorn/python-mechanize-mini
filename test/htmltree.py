@@ -2,6 +2,7 @@
 
 import unittest
 import codecs
+import os.path
 import xml.etree.ElementTree as ET
 import mechanize_mini.HtmlTree as HT
 
@@ -393,6 +394,39 @@ class TestConvenience(unittest.TestCase):
 
         el = HT.parsefragmentstr('<p>bla <b>blub    </b>\n<i>hola</p>')
         self.assertEqual(HT.text_content(el), 'bla blub hola')
+
+class FindStuffTest(unittest.TestCase):
+    def test_find_by_tag_name(self):
+        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')
+
+        self.assertEqual(HT.find_element(test.getroot(), tag='form', n=0).tag, 'form')
+
+    def test_find_by_class(self):
+        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+
+        # too many -> exception
+        with self.assertRaises(HT.TooManyElementsFoundError):
+            HT.find_element(test.getroot(), class_name='important')
+
+        # not existing
+        with self.assertRaises(HT.ElementNotFoundError):
+            HT.find_element(test.getroot(), class_name='nada')
+
+        # not so many
+        with self.assertRaises(HT.ElementNotFoundError):
+            HT.find_element(test.getroot(), class_name='important', n=10)
+
+        # but the third one is ok
+        HT.find_element(test.getroot(), class_name='important', n=2)
+
+        # but there should be two of these
+        self.assertEqual(len(list(HT.find_all_elements(test.getroot(), tag='p', class_name='important'))), 2)
+
+    def test_find_by_id(self):
+        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+
+        self.assertEqual(HT.find_element(test, id='importantest').get('id'), 'importantest')
+
 
 if __name__ == '__main__':
     unittest.main()

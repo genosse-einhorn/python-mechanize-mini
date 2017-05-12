@@ -162,13 +162,6 @@ class Browser:
         else:
             raise HTTPException(page.status, page)
 
-
-class ElementNotFoundError(Exception):
-    """ No element has been found """
-
-class TooManyElementsFoundError(Exception):
-    """ One element was requested, but multiple were found """
-
 class Page:
     """
     Represents a retrieved HTML page.
@@ -278,51 +271,11 @@ class Page:
         if context is None:
             context = self.document.getroot()
 
-        if tag is not None:
-            l = context.iter(tag)
-        else:
-            l = context.iter()
-
-        for el in l:
-            if id is not None:
-                if el.get('id') != id:
-                    continue
-
-            if class_name is not None:
-                if class_name not in el.get('class', '').split():
-                    continue
-
-            if text is not None:
-                if HT.text_content(el) != text:
-                    continue
-
-            yield el
+        return HT.find_all_elements(context, tag=tag, id=id, class_name=class_name, text=text)
 
     def find_element(self, *, n: int = None, **kwargs) -> ET.Element:
-        els = self.find_all_elements(**kwargs)
+        return HT._get_exactly_one(self.find_all_elements(**kwargs), n)
 
-        # write complicated code here to not traverse the iterator more than necessary
-        try:
-            first = next(els)
-        except StopIteration:
-            raise ElementNotFoundError("Expected (at least) one element, got none")
-
-        if n is None:
-            try:
-                next(els)
-                raise TooManyElementsFoundError("Expected exactly one element, found a second one")
-            except StopIteration:
-                return first
-        else:
-            retval = first
-            for i in range(1, n+1):
-                try:
-                    retval = next(els)
-                except StopIteration:
-                    raise ElementNotFoundError(
-                        "Tried to retrieve element {n}, but found only {i}".format(n=n, i=i))
-
-            return retval
 
     def open(self, url: str, **kwargs) -> 'Page':
         """

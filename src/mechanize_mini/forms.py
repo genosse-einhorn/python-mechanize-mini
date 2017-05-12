@@ -18,8 +18,123 @@ class Input:
     Wraps a ``<input>``, ``<select>`` or ``<textarea>`` element
     """
     def __init__(self, el: ET.Element) -> None:
+        if el.tag not in ['input', 'select', 'textarea']:
+            raise UnsupportedFormError("Input wrapper does not support element type `{0}'".format(el.tag))
+
         self.element = el
         """ The wrapped HTML element """
+
+    @property
+    def name(self) -> Optional[str]:
+        """ The ``name`` attribute of the HTML element """
+        return self.element.get('name')
+
+    @name.setter
+    def name(self, name: str) -> None:
+        self.element.set('name', name)
+
+    @property
+    def id(self) -> Optional[str]:
+        """ The ``id`` attribute of the HTML element """
+        return self.element.get('id')
+
+    @id.setter
+    def id(self, id: str) -> None:
+        self.element.set('id', id)
+
+    @property
+    def type(self) -> str:
+        """
+        The type of the input element (read-only)
+
+        This can be ``'select'``, ``'textarea'`` or any of the valid ``type=`` attributes
+        for the html ``<input>`` element.
+        """
+        if self.element.tag == 'select':
+            return 'select'
+        elif self.element.tag == 'textarea':
+            return 'textarea'
+        else:
+            return self.element.get('type', 'text')
+
+    @property
+    def value(self) -> Optional[str]:
+        """
+        The value associated with the HTML element
+
+        * If the input with the given name is a ``<select>`` element, this allows
+          you to read the currently selected option or select exactly one op
+          the available options.
+        * For all other elements, this represents the ``value`` attribute.
+
+        Raises
+        ------
+
+        UnsupportedFormError
+            * When reading a value: More than one option is currently selected in a ``<select>`` element
+            * When setting a value: There is no option with the given value in a ``<select>`` element.
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.set_selected_options` instead.
+        * If you want to select one of multiple radio buttons, look at :any:`Form.set_field`
+        * For checkboxes, you usually want to check them and not mess with their values
+        """
+        return _get_input_value(self.element)
+
+    @value.setter
+    def value(self, val: str) -> None:
+        return _set_input_value(self.element, val)
+
+    @property
+    def enabled(self) -> bool:
+        """
+        Whether the element is not disabled
+
+        Wraps the ``disabled`` attribute of the HTML element.
+        """
+        return self.element.get('disabled') == None
+
+    @enabled.setter
+    def enabled(self, is_enabled: bool) -> None:
+        if is_enabled:
+            if self.element.get('disabled') is not None:
+                del self.element.attrib['disabled']
+        else:
+            self.element.set('disabled', 'disabled')
+
+    @property
+    def checked(self) -> bool:
+        """
+        Whether a checkbox or radio button is checked.
+        Wraps the ``checked`` attribute of the HTML element.
+
+        This property is only applicable to checkboxes and radio buttons.
+
+        Raises
+        ------
+
+        UnsupportedFormError
+            When you set the ``checked`` attribute on an input element which
+            is neither a checkbox nor a radio button
+        """
+        if self.type in ['checkbox', 'radio']:
+            return self.element.get('checked') is not None
+        else:
+            return False
+
+    @checked.setter
+    def checked(self, is_checked: bool) -> None:
+        if self.type not in ['checkbox', 'radio']:
+            raise UnsupportedFormError('Only checkboxes and radio buttons can be checked')
+
+        if is_checked:
+            self.element.set('checked', 'checked')
+        else:
+            if self.element.get('checked') is not None:
+                del self.element.attrib['checked']
 
 class Form:
     """
@@ -298,8 +413,10 @@ def _get_input_value(el: ET.Element) -> Optional[str]:
             raise UnsupportedFormError("More than one <option> is selected")
     elif el.tag == 'textarea':
         return el.text
+    elif el.get('type', 'text') in ['radio', 'checkbox']:
+        return el.get('value', 'on')
     else:
-        return el.get('value')
+        return el.get('value', '')
 
 def _set_input_value(el: ET.Element, value: str) -> None:
     if el.tag == 'select':
