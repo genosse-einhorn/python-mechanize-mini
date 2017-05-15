@@ -475,7 +475,7 @@ def find_element(context: ET.Element, n: int = None, **kwargs) -> ET.Element:
 
 def HTML(text: str) -> ET.Element:
     """
-    Parses a HTML section from a string constant. This function can be used to embed "HTML literals"" in Python code
+    Parses a HTML section from a string constant. This function can be used to embed "HTML literals" in Python code
     """
     return parsefragmentstr(text)
 
@@ -485,8 +485,8 @@ def _get_exactly_one(els: Iterator[TElement], n: int = None) -> TElement:
     # write complicated code here to not traverse the iterator more than necessary
     try:
         first = next(els)
-    except StopIteration:
-        raise ElementNotFoundError("Expected (at least) one element, got none")
+    except StopIteration as e:
+        raise ElementNotFoundError("Expected (at least) one element, got none") from e
 
     if n is None:
         try:
@@ -499,8 +499,8 @@ def _get_exactly_one(els: Iterator[TElement], n: int = None) -> TElement:
         for i in range(1, n+1):
             try:
                 retval = next(els)
-            except StopIteration:
+            except StopIteration as e:
                 raise ElementNotFoundError(
-                    "Tried to retrieve element {n}, but found only {i}".format(n=n, i=i))
+                    "Tried to retrieve element {n}, but found only {i}".format(n=n, i=i)) from e
 
         return retval

@@ -43,7 +43,34 @@ class FormAccessorTest(unittest.TestCase):
         self.assertEqual(form.get_field('foo'), 'bar')
         self.assertEqual(form.get_field('checker'), None)
         self.assertEqual(form.get_field('longtext'), 'Loltext')
-        self.assertEqual(form.get_field('nonexistent'), None)
+
+        with self.assertRaises(InputNotFoundError):
+            form.get_field('nonexistent')
+
+        # crashes for multiple inputs with same name
+        with self.assertRaises(UnsupportedFormError):
+            form.get_field('twice')
+
+        with self.assertRaises(UnsupportedFormError):
+            form.get_field('conflict')
+
+        # returns null if no radio button is selected
+        self.assertEqual(form.get_field('gaga'), None)
+
+        # returns the selected radio button if there is one
+        for i in form.find_all_inputs(name='gaga'):
+            if i.value == 'a':
+                i.checked = True
+
+        self.assertEqual(form.get_field('gaga'), 'a')
+
+        # throws if multiple radio buttons are selected
+        for i in form.find_all_inputs(name='gaga'):
+            if i.value == 'b':
+                i.checked = True
+
+        with self.assertRaises(UnsupportedFormError):
+            form.get_field('gaga')
 
 
     def test_input_setvalue(self):
@@ -77,9 +104,31 @@ class FormAccessorTest(unittest.TestCase):
             form.set_field('nonexistent', 'bla')
 
         # textarea
-        txa = page.find_element(tag='textarea', context=form.element)
+        txa = form.find_input(type='textarea')
         form.set_field('longtext', 'blabla')
-        self.assertEqual(txa.text, 'blabla')
+        self.assertEqual(txa.element.text, 'blabla')
+
+        # crashes for multiple inputs with same name
+        with self.assertRaises(UnsupportedFormError):
+            form.set_field('twice', 'rice')
+
+        with self.assertRaises(UnsupportedFormError):
+            form.set_field('conflict', 'armed')
+
+        # can select a radio button
+        form.set_field('gaga', 'a')
+        for i in form.find_all_inputs(name='gaga'):
+            self.assertEqual(i.value == 'a', i.checked)
+
+        # make sure old one has been properly unselected
+        form.set_field('gaga', 'b')
+        for i in form.find_all_inputs(name='gaga'):
+            self.assertEqual(i.value == 'b', i.checked)
+
+        # can't select non-existing radio button
+        with self.assertRaises(UnsupportedFormError):
+            form.set_field('gaga', 'd')
+
 
 class InputTest(unittest.TestCase):
     def test_construct(self):
@@ -153,6 +202,13 @@ class InputTest(unittest.TestCase):
 
         i.enabled = True
         self.assertEqual(i.element.get('disabled'), None)
+
+        # make sure it doesn't break when setting it twice
+        # (we also need this for coverage masturbation)
+        i.enabled = True
+        i.enabled = True
+        i.enabled = False
+        i.enabled = False
 
     def test_getvalue(self):
         i = Input(HTML("<input type='hidden' name=bla value=blub>"))
@@ -246,6 +302,53 @@ class InputTest(unittest.TestCase):
             i = Input(HTML('<input type=text checked>'))
             i.checked = False
 
+class FindInputTest(unittest.TestCase):
+    def test_find_by_type(self):
+        form = Form(HTML("""
+            <form>
+                <input name='notype' value='bla'>
+                <select id='checkme'></select>
+                <input name='bogustype' type=BOGUS value=lala>
+                <textarea>trololo</textarea>
+            </form>
+            """), None)
+
+        self.assertEqual(form.find_input(type='text').name, 'notype')
+        self.assertEqual(form.find_input(type='select').id, 'checkme')
+        self.assertEqual(form.find_input(type='bogus').name, 'bogustype')
+        self.assertEqual(form.find_input(type='textarea').value, 'trololo')
+
+    def test_find_enabled(self):
+        form = Form(HTML("""
+            <form>
+                <input name='notype' value='bla' disabled>
+                <input name='bogustype' type=bogus value=lala>
+            </form>
+            """), None)
+
+        with self.assertRaises(HT.ElementNotFoundError):
+            form.find_input(name='notype', enabled=True)
+        with self.assertRaises(HT.ElementNotFoundError):
+            form.find_input(name='bogustype', enabled=False)
+
+        self.assertEqual(form.find_input(enabled=False).name, 'notype')
+        self.assertEqual(form.find_input(enabled=True).type, 'bogus')
+
+    def test_find_checked(self):
+        form = Form(HTML("""
+            <form>
+                <input type=CHeckBOX name=a>
+                <input type=RaDIO name=b checked>
+            </form>
+            """), None)
+
+        with self.assertRaises(HT.ElementNotFoundError):
+            form.find_input(name='a', checked=True)
+        with self.assertRaises(HT.ElementNotFoundError):
+            form.find_input(name='b', checked=False)
+
+        self.assertEqual(form.find_input(checked=False).name, 'a')
+        self.assertEqual(form.find_input(checked=True).type, 'radio')
 
 
 if __name__ == '__main__':

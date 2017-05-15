@@ -9,7 +9,7 @@ from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Se
 
 from . import HtmlTree as HT
 
-# HACK: Circular import is not needed at runtime, but the type checker needs it
+# HACK: Circular import is not needed at runtime, but the type checker requires it
 if TYPE_CHECKING: # pragma: no cover
     from . import Browser, Page
 
@@ -50,12 +50,7 @@ class Input:
         This can be ``'select'``, ``'textarea'`` or any of the valid ``type=`` attributes
         for the html ``<input>`` element.
         """
-        if self.element.tag == 'select':
-            return 'select'
-        elif self.element.tag == 'textarea':
-            return 'textarea'
-        else:
-            return self.element.get('type', 'text')
+        return _get_input_type(self.element)
 
     @property
     def value(self) -> Optional[str]:
@@ -225,21 +220,14 @@ class Form:
     def __find_input_els(self, *, name: str = None, id: str = None,
                          type: str = None, enabled: bool = None,
                          checked: bool = None) -> Iterator[ET.Element]:
-        for e in self.page.find_all_elements(context = self.element):
+        for e in HT.find_all_elements(self.element, id=id):
             if e.tag not in ['input', 'select', 'textarea']:
                 continue
 
             if name is not None and e.get('name') != name:
                 continue
 
-            if id is not None and e.get('id') != id:
-                continue
-
-            if type == 'select' and e.tag != 'select':
-                continue
-            elif type == 'textarea' and e.tag != 'textarea':
-                continue
-            elif type is not None and type != e.get('type', 'text'):
+            if type is not None and _get_input_type(e) != type:
                 continue
 
             if enabled is not None:
@@ -262,6 +250,9 @@ class Form:
         return (Input(el) for el in self.__find_input_els(
             name=name, id=id, type=type, enabled=enabled, checked=checked))
 
+    def find_input(self, *, n = None, **kwargs) -> Input:
+        return HT._get_exactly_one(self.find_all_inputs(**kwargs), n)
+
     def get_field(self, name: str) -> Optional[str]:
         """
         Retrieves the value associated with the given field name.
@@ -282,6 +273,8 @@ class Form:
               are not all radio buttons)
             * More than one option in a ``<select>`` element is selected
             * More than one radio button is checked
+        InputNotFoundError
+            * If no input element with the given name exists
 
         Notes
         -----
@@ -295,7 +288,7 @@ class Form:
         inputs = list(self.__find_input_els(name=name))
         if len(inputs) > 1:
             # check if they are all radio buttons
-            if any(True for x in inputs if x.get('type').lower().strip() != 'radio'):
+            if any(True for x in inputs if _get_input_type(x) != 'radio'):
                 raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
                                            "and they are not all radio buttons").format(name))
 
@@ -310,7 +303,7 @@ class Form:
         elif len(inputs) == 1:
             return _get_input_value(inputs[0])
         else:
-            return None
+            raise InputNotFoundError("No input with name `{0}' exists.".format(name))
 
     def set_field(self, name: str, value: str) -> None:
         """
@@ -349,7 +342,7 @@ class Form:
         inputs = list(self.__find_input_els(name=name))
         if len(inputs) > 1:
             # check if they are all radio buttons
-            if any(True for x in inputs if x.get('type').lower().strip() != 'radio'):
+            if any(True for x in inputs if _get_input_type(x) != 'radio'):
                 raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
                                            "and they are not all radio buttons").format(name))
 
@@ -401,7 +394,8 @@ class InvalidOptionError(Exception):
         """ The value that was supposed to be set """
 
 def _get_input_value(el: ET.Element) -> Optional[str]:
-    if el.tag == 'select':
+    type = _get_input_type(el)
+    if type == 'select':
         # return only option that is selected
         selected = [e for e in el.iter('option') if e.get('selected') is not None]
 
@@ -411,9 +405,9 @@ def _get_input_value(el: ET.Element) -> Optional[str]:
             return None
         else:
             raise UnsupportedFormError("More than one <option> is selected")
-    elif el.tag == 'textarea':
+    elif type == 'textarea':
         return el.text
-    elif el.get('type', 'text') in ['radio', 'checkbox']:
+    elif type in ['radio', 'checkbox']:
         return el.get('value', 'on')
     else:
         return el.get('value', '')
@@ -439,3 +433,11 @@ def _set_input_value(el: ET.Element, value: str) -> None:
         el.text = value
     else:
         el.set('value', value)
+
+def _get_input_type(el: ET.Element) -> str:
+    if el.tag == 'select':
+        return 'select'
+    elif el.tag == 'textarea':
+        return 'textarea'
+    else:
+        return el.get('type', 'text').lower().strip()
