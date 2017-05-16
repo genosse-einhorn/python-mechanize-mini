@@ -361,6 +361,27 @@ class Form:
         else:
             raise InputNotFoundError('No <input> element with name=' + name + ' found.')
 
+    def get_formdata(self) -> Iterator[Tuple[str,str]]:
+        """
+        Calculates form data in key-value pairs
+
+        This is the data that will be send when the form is submitted
+        """
+        for i in self.__find_input_els(enabled=True):
+            if i.get('name', '') == '':
+                continue
+
+            type = _get_input_type(i)
+            if type in ['radio','checkbox']:
+                if i.get('checked') is not None:
+                    yield (i.get('name', ''), i.get('value', 'on'))
+            elif type == 'select':
+                for o in HT.find_all_elements(i, tag='option'):
+                    if o.get('selected') is not None:
+                        yield (i.get('name', ''), o.get('value', str(o.text or '')))
+            else:
+                yield (i.get('name'), i.get('value', ''))
+
 class InputNotFoundError(Exception):
     """
     No matching ``<input>`` element has been found

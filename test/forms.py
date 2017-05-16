@@ -350,6 +350,31 @@ class FindInputTest(unittest.TestCase):
         self.assertEqual(form.find_input(checked=False).name, 'a')
         self.assertEqual(form.find_input(checked=True).type, 'radio')
 
+class SubmitTest(unittest.TestCase):
+    def test_formdata(self):
+        form = Form(HTML("""
+            <form>
+                <input type=hidden value=lala>
+                <input type=text name=name value='Mustermann'>
+                <input type=CHeckBOX name=a>
+                <input type=RaDIO name=b checked>
+                <input name='notype' value='bla' disabled>
+                <input name='bogustype' type=bogus value=lala>
+
+                <select name=b>
+                    <option selected>a</option>
+                    <option value=b>alfwaklfawklm</option>
+                    <option value=c selected>afmalfm</option>
+                </select>
+            </form>
+            """), None)
+        self.assertEqual(list(form.get_formdata()), [
+                ('name', 'Mustermann'),
+                ('b', 'on'),
+                ('bogustype', 'lala'),
+                ('b', 'a'),
+                ('b', 'c')
+            ])
 
 if __name__ == '__main__':
     TEST_SERVER = test_server.start_test_server()
