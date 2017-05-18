@@ -376,6 +376,60 @@ class SubmitTest(unittest.TestCase):
                 ('b', 'c')
             ])
 
+    def test_get(self):
+        page = browser.open(TEST_SERVER + '/empty.html')
+        form = Form(HTML("""
+            <form action=/show-params accept-charset=UTF-8>
+                <input type=hidden value=lala>
+                <input type=text name=name value='Müßtérmañ'>
+                <input type=CHeckBOX name=a>
+                <input type=RaDIO name=b checked>
+                <input name='notype' value='bla' disabled>
+                <input name='bogustype' type=bogus value=lala>
+
+                <select name=b>
+                    <option selected>a</option>
+                    <option value=b>alfwaklfawklm</option>
+                    <option value=c selected>afmalfm</option>
+                </select>
+            </form>
+            """), page)
+        result = form.submit()
+        self.assertEqual(result.document.getroot().text,
+            'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
+
+    def test_bogus_encoding(self):
+        page = browser.open(TEST_SERVER + '/form.html') # has utf-8 encoding
+        form = Form(HTML("""
+            <form action=show-post-params method=post accept-charset=latin-bogus>
+                <input type=text name=name value='Müßtérmañ'>
+            </form>
+            """), page)
+        result = form.submit()
+        self.assertEqual(result.document.getroot().text, 'name=Müßtérmañ\n')
+
+    def test_post(self):
+        page = browser.open(TEST_SERVER + '/form.html')
+        form = Form(HTML("""
+            <form action=show-post-params method=post>
+                <input type=hidden value=lala>
+                <input type=text name=name value='Müßtérmañ'>
+                <input type=CHeckBOX name=a>
+                <input type=RaDIO name=b checked>
+                <input name='notype' value='bla' disabled>
+                <input name='bogustype' type=bogus value=lala>
+
+                <select name=b>
+                    <option selected>a</option>
+                    <option value=b>alfwaklfawklm</option>
+                    <option value=c selected>afmalfm</option>
+                </select>
+            </form>
+            """), page)
+        result = form.submit()
+        self.assertEqual(result.document.getroot().text,
+            'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
+
 if __name__ == '__main__':
     TEST_SERVER = test_server.start_test_server()
 

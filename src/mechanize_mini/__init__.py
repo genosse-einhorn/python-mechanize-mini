@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from . import HtmlTree as HT
 from . import forms
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, IO
 
 class _NoHttpRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, hdrs, newurl):
@@ -78,7 +78,8 @@ class Browser:
         but you may replace it with your own compatible object.
         """
 
-    def open(self, url: str, additional_headers: Dict[str, str] = {}, maximum_redirects: int = 10) -> 'Page':
+    def open(self, url: str, *, additional_headers: Dict[str, str] = {},
+             maximum_redirects: int = 10, data: bytes = None) -> 'Page':
         """
         Navigates to :code:`url` and returns a new :any:`Page` object.
 
@@ -101,6 +102,9 @@ class Browser:
             is a bug and you should report it.
 
             If the allowed number of redirects is exceeded, a :any:`TooManyRedirectsException` will be thrown.
+        data:
+            POST data. If this is not ``None``, a POST request will be performed with the given
+            data as content. If data is ``None``, a regular GET request is performed
 
         Notes
         -----
@@ -112,7 +116,7 @@ class Browser:
 
         opener = urllib.request.build_opener(_NoHttpRedirectHandler, urllib.request.HTTPCookieProcessor(self.cookiejar))
 
-        request = urllib.request.Request(url)
+        request = urllib.request.Request(url, data=data)
         for header, val in self.default_headers.items():
             request.add_header(header, val)
 

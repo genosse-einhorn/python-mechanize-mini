@@ -3,6 +3,7 @@ import urllib.parse, urllib.request, urllib.error
 import multiprocessing
 import os.path
 import random
+import cgi
 
 # test http server
 
@@ -50,8 +51,33 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             for key, val in self.headers.items():
                 self.wfile.write('{0}: {1}\n'.format(key, val).encode('utf-8'))
+        elif self.path.startswith('/show-params?'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=UTF-8')
+            self.end_headers()
+
+            paramstr = self.path.split('?', 2)[-1]
+            params = cgi.parse_qsl(paramstr)
+
+            for name,val in params:
+                self.wfile.write('{0}={1}\n'.format(name, val).encode('UTF-8'))
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == '/show-post-params':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=UTF-8')
+            self.end_headers()
+
+            paramstr = self.rfile.read(int(self.headers['Content-Length'])).decode('ascii')
+            params = cgi.parse_qsl(paramstr)
+
+            for name,val in params:
+                self.wfile.write('{0}={1}\n'.format(name, val).encode('UTF-8'))
+        else:
+            self.send_response(404)
+
 
     # custom path translator
     def translate_path(self, path):

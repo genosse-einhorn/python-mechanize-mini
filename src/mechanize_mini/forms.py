@@ -3,7 +3,9 @@ Filling out and submitting HTML forms
 """
 
 import xml.etree.ElementTree as ET
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
+import io
+import codecs
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, TYPE_CHECKING
 
@@ -217,6 +219,22 @@ class Form:
         """
         return 'application/x-www-form-urlencoded'
 
+    @property
+    def accept_charset(self) -> str:
+        """
+        The encoding used to submit the form data
+
+        Can be specified with the ``accept-charset`` attribute, default is the page charset
+        """
+        a = str(self.element.get('accept-charset') or '')
+        if a != '':
+            try:
+                return codecs.lookup(a).name
+            except LookupError:
+                pass
+
+        return self.page.charset
+
     def __find_input_els(self, *, name: str = None, id: str = None,
                          type: str = None, enabled: bool = None,
                          checked: bool = None) -> Iterator[ET.Element]:
@@ -365,7 +383,7 @@ class Form:
         """
         Calculates form data in key-value pairs
 
-        This is the data that will be send when the form is submitted
+        This is the data that will be sent when the form is submitted
         """
         for i in self.__find_input_els(enabled=True):
             if i.get('name', '') == '':
@@ -381,6 +399,29 @@ class Form:
                         yield (i.get('name', ''), o.get('value', str(o.text or '')))
             else:
                 yield (i.get('name'), i.get('value', ''))
+
+    def get_formdata_query(self) -> str:
+        """
+        Get the query string (for submitting via GET)
+        """
+        # TODO: throw if multipart/form-data
+        charset = self.accept_charset
+        return urlencode([(name.encode(charset), val.encode(charset)) for name,val in self.get_formdata()])
+
+    def get_formdata_bytes(self) -> bytes:
+        """
+        The POST data as stream
+        """
+        # TODO: multipart/form-data
+        return self.get_formdata_query().encode('ascii')
+
+    def submit(self) -> 'Page':
+        if self.method == 'POST':
+            return self.page.open(self.action, data=self.get_formdata_bytes(),
+                                  additional_headers={'Content-Type': self.enctype})
+        else:
+            return self.page.open(urljoin(self.action, '?'+self.get_formdata_query()))
+
 
 class InputNotFoundError(Exception):
     """
