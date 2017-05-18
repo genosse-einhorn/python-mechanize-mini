@@ -302,6 +302,18 @@ class InputTest(unittest.TestCase):
             i = Input(HTML('<input type=text checked>'))
             i.checked = False
 
+class FindFormTest(unittest.TestCase):
+    def test_find_by_name_id(self):
+        page = browser.open(TEST_SERVER + '/form.html')
+        formname = page.find_form(name='withaction')
+        formid = page.find_form(id='actionwith')
+        formboth = page.find_form(name='withaction',id='actionwith')
+        formsecond = page.find_form(n=1)
+
+        self.assertEqual(formname.element, formid.element)
+        self.assertEqual(formid.element, formboth.element)
+        self.assertEqual(formboth.element, formsecond.element)
+
 class FindInputTest(unittest.TestCase):
     def test_find_by_type(self):
         form = Form(HTML("""

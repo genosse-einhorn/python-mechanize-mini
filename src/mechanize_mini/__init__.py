@@ -280,6 +280,29 @@ class Page:
     def find_element(self, *, n: int = None, **kwargs) -> ET.Element:
         return HT._get_exactly_one(self.find_all_elements(**kwargs), n)
 
+    def find_all_forms(self, *, context: ET.Element = None, id: str = None, name: str = None) -> Iterator[forms.Form]:
+        """
+        Finds <form> elements in the given page and returns :any:`forms.Form` instances
+
+        The keyword arguments specify search criteria:
+
+        **context** (:py:obj:`ET.Element`)
+            Find only forms which are descendants of the given element
+        **id** (:py:obj:`str`)
+            Find only forms with the given ``id`` attribute (there should be only one)
+        **name** (:py:obj:`str`)
+            Find only forms with the given ``name`` attribute (usually, there is only one)
+        """
+
+        for i in self.find_all_elements(context=context, id=id, tag='form'):
+            if name is not None:
+                if i.get('name') != name:
+                    continue
+
+            yield forms.Form(i, self)
+
+    def find_form(self, *, n:int = None, **kwargs) -> forms.Form:
+        return HT._get_exactly_one(self.find_all_forms(**kwargs), n)
 
     def open(self, url: str, **kwargs) -> 'Page':
         """
