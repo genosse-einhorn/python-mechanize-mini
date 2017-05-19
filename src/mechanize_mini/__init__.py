@@ -104,7 +104,7 @@ class Browser:
             If the allowed number of redirects is exceeded, a :any:`TooManyRedirectsException` will be thrown.
         data:
             POST data. If this is not ``None``, a POST request will be performed with the given
-            data as content. If data is ``None``, a regular GET request is performed
+            data as content. If data is ``None`` (the default), a regular GET request is performed
 
         Notes
         -----
@@ -208,7 +208,7 @@ class Page:
 
         self.charset = HT.detect_charset(self.response_bytes, response.headers.get_content_charset())
         """
-        The encoding used to decode the page.
+        The encoding used to decode the page (str).
 
         The encoding is determined by looking at the HTTP Content-Type header,
         byte order marks in the document and <meta> tags, and applying various
@@ -217,7 +217,7 @@ class Page:
 
         self.document = HT.parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: ET.ElementTree
         """
-        The parsed document
+        The parsed document (:any:`ET.ElementTree`)
         """
 
     @property
