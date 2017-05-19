@@ -302,6 +302,45 @@ class InputTest(unittest.TestCase):
             i = Input(HTML('<input type=text checked>'))
             i.checked = False
 
+    def test_multiselect(self):
+        i = Input(HTML('<select><option>a<option value=b selected>c</select>'))
+        self.assertEqual(i.available_options, [('a', 'a'),('b', 'c')])
+        self.assertEqual(i.available_option_values, {'a','b'})
+        self.assertEqual(i.selected_options, ['b'])
+
+        # works with sets
+        i.selected_options = {'b','a'}
+        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), 'selected')
+        self.assertEqual(i.selected_options, ['a','b'])
+
+        # also works with lists
+        i.selected_options = ['a']
+        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.selected_options, ['a'])
+
+        # can also clear select status
+        i.selected_options = iter([])
+        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), None)
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.selected_options, [])
+
+        # raises for invalid options
+        with self.assertRaises(UnsupportedFormError):
+            i.selected_options = ['bogus']
+
+        # raises for non-select elements
+        i = Input(HTML('<input>'))
+        with self.assertRaises(UnsupportedFormError):
+            i.available_options
+        with self.assertRaises(UnsupportedFormError):
+            i.available_option_values
+        with self.assertRaises(UnsupportedFormError):
+            i.selected_options
+        with self.assertRaises(UnsupportedFormError):
+            i.selected_options = ['a','b']
+
 class FindFormTest(unittest.TestCase):
     def test_find_by_name_id(self):
         page = browser.open(TEST_SERVER + '/form.html')

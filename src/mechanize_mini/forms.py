@@ -7,7 +7,7 @@ from urllib.parse import urljoin, urlencode
 import io
 import codecs
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, TYPE_CHECKING
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, Iterable, TYPE_CHECKING
 
 from . import HtmlTree as HT
 
@@ -132,6 +132,81 @@ class Input:
         else:
             if self.element.get('checked') is not None:
                 del self.element.attrib['checked']
+
+    @property
+    def available_options(self) -> Sequence[Tuple[str,str]]:
+        """
+        The list of available options for ``<select>`` elements (read-only)
+
+        Returns
+        -------
+        A sequence of value,text tuples
+
+        Raises
+        ------
+        UnsupportedFormError
+            If the input is not a <select> element
+        """
+        if self.type != 'select':
+            raise UnsupportedFormError('available_options is only available for <select> inputs')
+
+        return [(e.get('value', str(e.text)), str(e.text)) for e in HT.find_all_elements(self.element, tag='option')]
+
+    @property
+    def available_option_values(self) -> Set[str]:
+        """
+        A set of available option values for ``<select>`` elements (read-only)
+
+        Raises
+        ------
+        UnsupportedFormError
+            If the input is not a <select> element
+        """
+        return {value for value,text in self.available_options}
+
+    @property
+    def selected_options(self) -> Sequence[str]:
+        """
+        The list of selected options for ``<select>`` elements (read-write).
+
+        You want use this to read and write ``<select multiple>`` inputs,
+        for single-value selects, the :any:`value` property is more appropriate
+
+        Returns
+        -------
+        A sequence of values (str)
+
+        Raises
+        ------
+        UnsupportedFormError
+            If the input is not a <select> element
+        UnsupportedFormError
+            Tried to select an option that is not present
+        """
+        if self.type != 'select':
+            raise UnsupportedFormError('selected_options is only available for <select> inputs')
+
+        return [e.get('value', str(e.text)) for e in HT.find_all_elements(self.element, tag='option') if e.get('selected') != None]
+
+    @selected_options.setter
+    def selected_options(self, options: Iterable[str]) -> None:
+        if self.type != 'select':
+            raise UnsupportedFormError('selected_options is only available for <select> inputs')
+
+        avail_values = self.available_option_values
+        selected_values = set(options)
+
+        illegal_values = selected_values - avail_values
+        if len(illegal_values) > 0:
+            raise UnsupportedFormError('the following options are not valid for this <select> element: ' + str(illegal_values))
+
+        for el in HT.find_all_elements(self.element, tag='option'):
+            if el.get('value', el.text) in selected_values:
+                el.set('selected', 'selected')
+            else:
+                if el.get('selected') != None:
+                    del el.attrib['selected']
+
 
 class Form:
     """
