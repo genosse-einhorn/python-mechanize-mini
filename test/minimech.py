@@ -57,6 +57,11 @@ class BasicTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/show-headers', additional_headers={'X-Foo': 'bar'})
         self.assertIn('X-Foo: bar', test.document.getroot().text.split('\n'))
 
+    def test_return_headers(self):
+        test = browser.open(TEST_SERVER + '/return-x-headers?bla=foo&BAR=baZ')
+        self.assertEqual(test.headers['X-Bla'], 'foo')
+        self.assertEqual(test.headers['x-bar'], 'baZ')
+
 class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = browser.open(TEST_SERVER + '/form.html')

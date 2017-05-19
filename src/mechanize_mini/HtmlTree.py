@@ -471,11 +471,24 @@ def find_all_elements(context: ET.Element, *, tag: str = None,
         yield el
 
 def find_element(context: ET.Element, n: int = None, **kwargs) -> ET.Element:
+    """
+    Like :any:`find_all_elements`, but returns exactly one element.
+
+    If `n` is specified, then the n-th match will be returned. If `n` is None,
+    only one matching element is allowed (and will be returned).
+
+    Raises
+    ------
+    ElementNotFoundError
+        If there is no matching (n-th) element
+    TooManyElementsFoundError
+        If `n` is None but more than one match was found
+    """
     return _get_exactly_one(find_all_elements(context, **kwargs), n)
 
 def HTML(text: str) -> ET.Element:
     """
-    Parses a HTML section from a string constant. This function can be used to embed "HTML literals" in Python code
+    Parses a HTML fragment from a string constant. This function can be used to embed "HTML literals" in Python code
     """
     return parsefragmentstr(text)
 

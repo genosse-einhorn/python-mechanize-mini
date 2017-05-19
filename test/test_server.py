@@ -61,6 +61,16 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             for name,val in params:
                 self.wfile.write('{0}={1}\n'.format(name, val).encode('UTF-8'))
+        elif self.path.startswith('/return-x-headers?'):
+            self.send_response(200)
+
+            paramstr = self.path.split('?', 2)[-1]
+            params = cgi.parse_qsl(paramstr)
+
+            for name,val in params:
+                self.send_header('x-'+name, val)
+
+            self.end_headers()
         else:
             super().do_GET()
 

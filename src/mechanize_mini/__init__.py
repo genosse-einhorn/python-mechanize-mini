@@ -149,7 +149,7 @@ class Browser:
                 h = str(i.get('http-equiv') or '')
                 c = str(i.get('content') or '')
                 match = re.fullmatch('\s*\d+\s*;\s*[uU][rR][lL]\s*=(.+)', c)
-                if match:
+                if h.lower() == 'refresh' and match:
                     # still shitty meta redirect
                     redirect_to = match.group(1).strip()
 
@@ -193,8 +193,12 @@ class Page:
         The HTTP status code received for this page (integer, read-only)
         """
 
-        self.headers = dict(response.info()) # type: Dict[str, str]
-        """ The HTTP headers received with this page """
+        self.headers = response.info() # type: Dict[str, str]
+        """
+        The HTTP headers received with this page
+
+        Note: This is a special kind of dictionary which is not case-sensitive
+        """
 
         self.url = response.geturl() # type: str
         """ The URL to this page (str, read-only)"""
