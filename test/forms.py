@@ -304,42 +304,60 @@ class InputTest(unittest.TestCase):
 
     def test_multiselect(self):
         i = Input(HTML('<select><option>a<option value=b selected>c</select>'))
-        self.assertEqual(i.available_options, [('a', 'a'),('b', 'c')])
-        self.assertEqual(i.available_option_values, {'a','b'})
-        self.assertEqual(i.selected_options, ['b'])
+        self.assertEqual([(o.value, o.text) for o in i.options], [('a', 'a'),('b', 'c')])
+        self.assertEqual(i.options.get_selected(), ['b'])
 
         # works with sets
-        i.selected_options = {'b','a'}
+        i.options.set_selected({'b','a'})
         self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
         self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), 'selected')
-        self.assertEqual(i.selected_options, ['a','b'])
+        self.assertEqual(i.options.get_selected(), ['a','b'])
 
         # also works with lists
-        i.selected_options = ['a']
+        i.options.set_selected(['a'])
         self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
         self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
-        self.assertEqual(i.selected_options, ['a'])
+        self.assertEqual(i.options.get_selected(), ['a'])
+
+        # can individually select options
+        i.options['b'].selected = True
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), 'selected')
+
+        # and unselect them
+        i.options['b'].selected = False
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        # and unselect them again for code coverage masturbation
+        i.options['b'].selected = False
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.options['b'].selected, False)
+
+        # bogus option accessors throw
+        with self.assertRaises(IndexError):
+            i.options['bogus'].selected = True
 
         # can also clear select status
-        i.selected_options = iter([])
+        i.options.set_selected(iter([]))
         self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), None)
         self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
-        self.assertEqual(i.selected_options, [])
+        self.assertEqual(i.options.get_selected(), [])
+
+        # oh and btw we can also retrieve the number of options
+        self.assertEqual(len(i.options), 2)
+
+        # and - rogue feature which doesn't type check - you can assign an option to value
+        i.value = i.options[0]
+        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
+        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.options.get_selected(), ['a'])
 
         # raises for invalid options
         with self.assertRaises(UnsupportedFormError):
-            i.selected_options = ['bogus']
+            i.options.set_selected(['bogus'])
 
         # raises for non-select elements
         i = Input(HTML('<input>'))
         with self.assertRaises(UnsupportedFormError):
-            i.available_options
-        with self.assertRaises(UnsupportedFormError):
-            i.available_option_values
-        with self.assertRaises(UnsupportedFormError):
-            i.selected_options
-        with self.assertRaises(UnsupportedFormError):
-            i.selected_options = ['a','b']
+            i.options
 
 class FindFormTest(unittest.TestCase):
     def test_find_by_name_id(self):

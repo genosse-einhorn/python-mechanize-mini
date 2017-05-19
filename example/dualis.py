@@ -28,8 +28,8 @@ page = page.follow_link(text='Prüfungsergebnisse');
 semesterform = page.find_form(id='semesterchange')
 semesterbox = semesterform.find_input(type='select')
 
-for semester in semesterbox.available_option_values:
-    semesterbox.value = semester
+for semester in semesterbox.options:
+    semesterbox.value = semester.value
 
     semesterpage = semesterform.submit()
 

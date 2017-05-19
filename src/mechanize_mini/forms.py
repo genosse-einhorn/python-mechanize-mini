@@ -6,14 +6,95 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlencode
 import io
 import codecs
+import collections.abc
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, Iterable, TYPE_CHECKING
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, Iterable, Any, TYPE_CHECKING
 
 from . import HtmlTree as HT
 
 # HACK: Circular import is not needed at runtime, but the type checker requires it
 if TYPE_CHECKING: # pragma: no cover
     from . import Browser, Page
+
+class Option:
+    """
+    Wraps a ``<option>`` element
+    """
+    def __init__(self, el: ET.Element) -> None:
+        self.element = el
+        """ The wrapped :any:`ET.Element``"""
+
+    @property
+    def value(self) -> str:
+        """ The ``value`` associated with that option (read-only str) """
+        return self.element.get('value', str(self.element.text))
+
+    @property
+    def text(self) -> str:
+        """ The text associated with that option (read-only str) """
+        return str(self.element.text)
+
+    @property
+    def selected(self) -> bool:
+        """ Whether the option is selected (bool, read-write) """
+        return self.element.get('selected') is not None
+
+    @selected.setter
+    def selected(self, selected: bool) -> None:
+        if selected:
+            self.element.set('selected', 'selected')
+        else:
+            if self.element.get('selected') is not None:
+                del self.element.attrib['selected']
+
+    def __str__(self) -> str:
+        return self.value
+
+class OptionCollection(Sequence[Option]):
+    """
+    Interface a list of ``<option>`` tags
+
+    This is a :any:`Sequence` type, but you can also access options by their values
+    """
+    def __init__(self, option_els: Iterable[ET.Element]) -> None:
+        self.__backing_list = [Option(el) for el in option_els]
+
+    def __getitem__(self, key):
+        """
+        Retrieve an option from the option list.
+
+        In addition to slices and integers, you can also pass strings as key,
+        then the option will be found by its value.
+        """
+        if isinstance(key, str):
+            # find option by value
+            for o in self.__backing_list:
+                if o.value == key:
+                    return o
+
+            raise IndexError("No option with value '{0}' found".format(key))
+        else:
+            return self.__backing_list[key]
+
+    def __len__(self) -> int:
+        return len(self.__backing_list)
+
+    def get_selected(self) -> Sequence[str]:
+        """ Returns a list of selected option values """
+        return [o.value for o in self if o.selected]
+
+    def set_selected(self, values: Iterable[str]) -> None:
+        """ Selects all options with the given values (and unselects everything else) """
+        avail_values = {o.value for o in self}
+        selected_values = set(values)
+
+        illegal_values = selected_values - avail_values
+        if len(illegal_values) > 0:
+            raise UnsupportedFormError('the following options are not valid for this <select> element: ' + str(illegal_values))
+
+        for o in self:
+            o.selected = o.value in selected_values
+
 
 class Input:
     """
@@ -83,7 +164,7 @@ class Input:
 
     @value.setter
     def value(self, val: str) -> None:
-        return _set_input_value(self.element, val)
+        return _set_input_value(self.element, str(val))
 
     @property
     def enabled(self) -> bool:
@@ -134,13 +215,9 @@ class Input:
                 del self.element.attrib['checked']
 
     @property
-    def available_options(self) -> Sequence[Tuple[str,str]]:
+    def options(self) -> OptionCollection:
         """
-        The list of available options for ``<select>`` elements (read-only)
-
-        Returns
-        -------
-        A sequence of value,text tuples
+        Options available for a <select> element
 
         Raises
         ------
@@ -148,64 +225,9 @@ class Input:
             If the input is not a <select> element
         """
         if self.type != 'select':
-            raise UnsupportedFormError('available_options is only available for <select> inputs')
+            raise UnsupportedFormError('options is only available for <select> inputs')
 
-        return [(e.get('value', str(e.text)), str(e.text)) for e in HT.find_all_elements(self.element, tag='option')]
-
-    @property
-    def available_option_values(self) -> Set[str]:
-        """
-        A set of available option values for ``<select>`` elements (read-only)
-
-        Raises
-        ------
-        UnsupportedFormError
-            If the input is not a <select> element
-        """
-        return {value for value,text in self.available_options}
-
-    @property
-    def selected_options(self) -> Sequence[str]:
-        """
-        The list of selected options for ``<select>`` elements (read-write).
-
-        You want use this to read and write ``<select multiple>`` inputs,
-        for single-value selects, the :any:`value` property is more appropriate
-
-        Returns
-        -------
-        A sequence of values (str)
-
-        Raises
-        ------
-        UnsupportedFormError
-            If the input is not a <select> element
-        UnsupportedFormError
-            Tried to select an option that is not present
-        """
-        if self.type != 'select':
-            raise UnsupportedFormError('selected_options is only available for <select> inputs')
-
-        return [e.get('value', str(e.text)) for e in HT.find_all_elements(self.element, tag='option') if e.get('selected') != None]
-
-    @selected_options.setter
-    def selected_options(self, options: Iterable[str]) -> None:
-        if self.type != 'select':
-            raise UnsupportedFormError('selected_options is only available for <select> inputs')
-
-        avail_values = self.available_option_values
-        selected_values = set(options)
-
-        illegal_values = selected_values - avail_values
-        if len(illegal_values) > 0:
-            raise UnsupportedFormError('the following options are not valid for this <select> element: ' + str(illegal_values))
-
-        for el in HT.find_all_elements(self.element, tag='option'):
-            if el.get('value', el.text) in selected_values:
-                el.set('selected', 'selected')
-            else:
-                if el.get('selected') != None:
-                    del el.attrib['selected']
+        return OptionCollection(HT.find_all_elements(self.element, tag='option'))
 
 
 class Form:
