@@ -308,6 +308,57 @@ class Page:
     def find_form(self, *, n:int = None, **kwargs) -> forms.Form:
         return HT._get_exactly_one(self.find_all_forms(**kwargs), n)
 
+    # TODO: investigate usefulness of link type
+    def find_all_links(self, *, context: ET.Element = None, id: str = None, class_name: str = None,
+                       url: str = None, text: str = None) -> Iterator[ET.Element]:
+        """
+        Finds all matching hyperlinks (``<a href=...>``) in the document.
+
+        Search critera are specified as keyword arguments:
+
+        context (:py:obj:`ET.Element`)
+            Return only hyperlinks which are descendants of the given element
+        id (:py:obj:`str`)
+            Return only hyperlinks with the given ``id`` attribute
+        class_name (:py:obj:`str`)
+            Return only hyperlinks with the given css class
+        url (:py:obj:`str` or compiled regex pattern)
+            Return only hyperlinks where the ``href`` attribute equals the
+            given string or matches the given regex
+        url (:py:obj:`str` or compiled regex pattern)
+            Return only hyperlinks where the normalized link text (as returned
+            by :any:`mechanize_mini.HtmlTree.text_content`) equals the
+            given string or matches the given regex
+        """
+        for i in self.find_all_elements(tag='a', context=context, id=id, class_name=class_name):
+            if i.get('href') is None:
+                continue
+
+            if url is not None and i.get('href') != url:
+                    continue
+
+            if text is not None and HT.text_content(i) != text:
+                continue
+
+            yield i
+
+    def find_link(self, *, n: int = None, **kwargs) -> ET.Element:
+        """
+        Like :any:`find_all_links`, but returns the n-th link found.
+
+        Will raise an exception if n is None and more than one matching link has been found.
+        """
+        return HT._get_exactly_one(self.find_all_links(**kwargs), n)
+
+    def follow_link(self, **kwargs) -> 'Page':
+        """
+        Like :any:`find_link`, but immediately opens the link.
+
+        Returns the new page.
+        """
+        return self.open(self.find_link(**kwargs).get('href'))
+
+
     def open(self, url: str, **kwargs) -> 'Page':
         """
         Opens another page as if it was linked from the current page.

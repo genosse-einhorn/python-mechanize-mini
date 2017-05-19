@@ -159,6 +159,34 @@ class PageOpenTest(unittest.TestCase):
         self.assertIn('Referer: ' + TEST_SERVER + '/redirect-meta?show-headers',
                       test5.document.getroot().text.split('\n'))
 
+class HyperlinkTest(unittest.TestCase):
+    def test_find_link(self):
+        test = browser.open(TEST_SERVER + '/hyperlinks.html')
+
+        first = test.find_element(tag='a', n=0)
+        link1 = test.find_link(n=0)
+        self.assertEqual(first, link1)
+
+        link1 = test.find_link(url='/test.html')
+        self.assertEqual(first, link1)
+
+        link1 = test.find_link(text='First Link')
+        self.assertEqual(first, link1)
+
+        # find_link ignores anchors without href
+        second = test.find_element(tag='a', n=2)
+        link2 = test.find_link(n=1)
+        self.assertEqual(second, link2)
+
+        link2 = test.find_link(text='Second One')
+        self.assertEqual(second, link2)
+
+    def test_follow_link(self):
+        test = browser.open(TEST_SERVER + '/hyperlinks.html')
+
+        page = test.follow_link(text='Second One')
+
+        self.assertEqual(page.uri, TEST_SERVER + '/test.html')
 
 if __name__ == '__main__':
     TEST_SERVER = test_server.start_test_server()
