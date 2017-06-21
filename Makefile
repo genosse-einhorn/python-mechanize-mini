@@ -4,26 +4,14 @@
 all:
 	@# do nothing
 
-test-mypy:
-	@# Run MyPy
-	@mypy --check-untyped-defs --strict-optional src/mechanize_mini/*.py
-
-test-mech: test-mypy
-	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/minimech.py
-
-test-html: test-mypy
-	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/htmltree.py
-
-test-forms: test-mypy
-	@PYTHONPATH=$$(pwd -P)/src:$$PYTHONPATH test/forms.py
-
-test: test-mypy test-mech test-html test-forms
+test: coverage
 
 coverage: test-mypy
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/src/mechanize_mini" test/minimech.py
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src/mechanize_mini" test/htmltree.py
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/src/mechanize_mini" test/forms.py
-	@PYTHONPATH="$$(pwd -P)/src:$$PYTHONPATH" python3-coverage report -m
+	@PYTHONPATH="$$(pwd -P):$$PYTHONPATH" python3-coverage run --branch --source "$$(pwd -P)/mechanize_mini" mechanize_mini/test/minimech.py
+	@PYTHONPATH="$$(pwd -P):$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/mechanize_mini" mechanize_mini/test/htmltree.py
+	@PYTHONPATH="$$(pwd -P):$$PYTHONPATH" python3-coverage run -a --branch --source "$$(pwd -P)/mechanize_mini" mechanize_mini/test/forms.py
+	@PYTHONPATH="$$(pwd -P):$$PYTHONPATH" python3-coverage html --omit "$$(pwd -P)/mechanize_mini/test/*.py"
+	@PYTHONPATH="$$(pwd -P):$$PYTHONPATH" python3-coverage report --omit "$$(pwd -P)/mechanize_mini/test/*.py" -m
 
 
 apidocs:
