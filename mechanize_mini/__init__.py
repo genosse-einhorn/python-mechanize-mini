@@ -16,7 +16,7 @@ class _NoHttpRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 class HTTPException(Exception):
     """
-    Raised when the requested page respons with HTTP code != 200
+    Raised when the requested page responds with HTTP code != 200
     """
     def __init__(self, code: int, page: 'Page') -> None:
         super().__init__("HTTP/" + str(code))
@@ -217,7 +217,7 @@ class Page:
 
         self.document = HT.parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: ET.ElementTree
         """
-        The parsed document (:any:`ET.ElementTree`)
+        The parsed document (:py:obj:`ET.ElementTree`)
         """
 
     @property
@@ -228,7 +228,7 @@ class Page:
         This is always an absolute URL, even if it
         was specified as a relative URL in the <base> tag.
 
-        . note::
+        .. note::
 
             This read-only property is calculated from the ``<base>`` tag(s) present
             in the document. If you change the ``<base>`` tag in the :any:`document`,
@@ -322,13 +322,11 @@ class Page:
             Return only hyperlinks with the given ``id`` attribute
         class_name (:py:obj:`str`)
             Return only hyperlinks with the given css class
-        url (:py:obj:`str` or compiled regex pattern)
-            Return only hyperlinks where the ``href`` attribute equals the
-            given string or matches the given regex
-        url (:py:obj:`str` or compiled regex pattern)
+        url (:py:obj:`str`)
+            Return only hyperlinks where the ``href`` attribute equals the given string
+        text (:py:obj:`str` or compiled regex pattern)
             Return only hyperlinks where the normalized link text (as returned
-            by :any:`mechanize_mini.HtmlTree.text_content`) equals the
-            given string or matches the given regex
+            by :any:`mechanize_mini.HtmlTree.text_content`) equals the given string
         """
         for i in self.find_all_elements(tag='a', context=context, id=id, class_name=class_name):
             if i.get('href') is None:

@@ -17,7 +17,7 @@ coverage: test-mypy
 apidocs:
 	@rm -rf docs/api
 	@mkdir -p docs/api
-	@sphinx-apidoc-3 -o ./docs/api -P -F -a -H Mechanize-Mini -A 'Jonas Kümmerlin <jonas@kuemmerlin.eu>' -V 0.1 ./src
+	@sphinx-apidoc-3 -o ./docs/api -P -F -a -H Mechanize-Mini -A 'Jonas Kümmerlin <jonas@kuemmerlin.eu>' -V 0.1 ./
 	@echo "extensions.extend(['sphinx.ext.intersphinx', 'sphinx.ext.napoleon'])" >> docs/api/conf.py
 	@echo "napoleon_use_ivar = True" >> docs/api/conf.py
 	@echo "napoleon_include_init_with_doc = True" >> docs/api/conf.py

@@ -22,7 +22,7 @@ class Option:
     """
     def __init__(self, el: ET.Element) -> None:
         self.element = el
-        """ The wrapped :any:`ET.Element``"""
+        """ The wrapped py:obj:`ET.Element``"""
 
     @property
     def value(self) -> str:
@@ -54,7 +54,9 @@ class OptionCollection(Sequence[Option]):
     """
     Interface a list of ``<option>`` tags
 
-    This is a :any:`Sequence` type, but you can also access options by their values
+    This is a sequence type (like a list), but you can also access options by their values
+
+    TODO: Example
     """
     def __init__(self, option_els: Iterable[ET.Element]) -> None:
         self.__backing_list = [Option(el) for el in option_els]
@@ -156,7 +158,7 @@ class Input:
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.set_selected_options` instead.
+          :any:`Form.find_input` and :any:`Input.options` instead.
         * If you want to select one of multiple radio buttons, look at :any:`Form.set_field`
         * For checkboxes, you usually want to check them and not mess with their values
         """
@@ -234,7 +236,7 @@ class Form:
     """
     Wraps a ``<form>`` inside a document.
 
-    . note::
+    .. note::
 
         This is a thin wrapper around the document nodes. All data is read from
         and written into the html elements.
@@ -245,9 +247,9 @@ class Form:
         """
         Constructs a new :any:`Form` instance.
 
-        . note::
+        .. note::
 
-            Most of the time, you'll want to use :any:`Page.find_form` instead
+            Most of the time, you'll want to use :py:obj:`Page.find_form` instead
 
         """
 
@@ -258,7 +260,7 @@ class Form:
 
         self.page = page
         """
-        The :any:`Page` which contains the form
+        The :py:obj:`Page` which contains the form
         """
 
     @property
@@ -382,20 +384,18 @@ class Form:
 
         Raises
         ------
-
         UnsupportedFormError
-            * There is more than one input element with the same name (and they
-              are not all radio buttons)
-            * More than one option in a ``<select>`` element is selected
-            * More than one radio button is checked
+            If there is more than one input element with the same name (and they
+            are not all radio buttons), or if more than one option in a
+            ``<select>`` element is selected, or more than one radio button is checked
         InputNotFoundError
-            * If no input element with the given name exists
+            If no input element with the given name exists
 
         Notes
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.get_selected_options` instead.
+          :any:`Form.find_input` and :any:`Input.options` instead.
         * If your form is particularly crazy, you might have to get your hands dirty
           and get element attributes yourself.
 
@@ -449,7 +449,7 @@ class Form:
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.set_selected_options` instead.
+          :any:`Form.find_input` and :any:`Input.options` instead.
         * If your form is particularly crazy, you might have to get your hands dirty
           and set element attributes yourself.
 

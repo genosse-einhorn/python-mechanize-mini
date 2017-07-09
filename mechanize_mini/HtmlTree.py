@@ -411,10 +411,9 @@ def text_content(element: ET.Element) -> str:
     -------
 
     >>> import mechanize_mini.HtmlTree as HT
-    >>> element = HT.parsefragmentstr('<p>foo <i>bar    </i>\nbaz</p>')
+    >>> element = HT.parsefragmentstr('<p>foo <i>bar    </i>\\nbaz</p>')
     >>> HT.text_content(element)
     'foo bar baz'
-
     """
 
     # let python walk the tree and get the text for us
