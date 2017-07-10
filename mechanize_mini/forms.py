@@ -20,14 +20,14 @@ class Option:
     """
     Wraps a ``<option>`` element
     """
-    def __init__(self, el: ET.Element) -> None:
+    def __init__(self, el: HT.HtmlElement) -> None:
         self.element = el
         """ The wrapped py:obj:`ET.Element``"""
 
     @property
     def value(self) -> str:
         """ The ``value`` associated with that option (read-only str) """
-        return self.element.get('value', str(self.element.text))
+        return self.element.get('value') or str(self.element.text)
 
     @property
     def text(self) -> str:
@@ -58,7 +58,7 @@ class OptionCollection(Sequence[Option]):
 
     TODO: Example
     """
-    def __init__(self, option_els: Iterable[ET.Element]) -> None:
+    def __init__(self, option_els: Iterable[HT.HtmlElement]) -> None:
         self.__backing_list = [Option(el) for el in option_els]
 
     def __getitem__(self, key):
@@ -102,7 +102,7 @@ class Input:
     """
     Wraps a ``<input>``, ``<select>`` or ``<textarea>`` element
     """
-    def __init__(self, el: ET.Element) -> None:
+    def __init__(self, el: HT.HtmlElement) -> None:
         if el.tag not in ['input', 'select', 'textarea']:
             raise UnsupportedFormError("Input wrapper does not support element type `{0}'".format(el.tag))
 
@@ -229,7 +229,7 @@ class Input:
         if self.type != 'select':
             raise UnsupportedFormError('options is only available for <select> inputs')
 
-        return OptionCollection(HT.find_all_elements(self.element, tag='option'))
+        return OptionCollection(self.element.iterfind('.//option'))
 
 
 class Form:
@@ -243,7 +243,7 @@ class Form:
 
     """
 
-    def __init__(self, el: ET.Element, page: 'Page') -> None:
+    def __init__(self, el: HT.HtmlElement, page: 'Page') -> None:
         """
         Constructs a new :any:`Form` instance.
 
@@ -286,7 +286,7 @@ class Form:
         of the ``<form>`` element, or if the attribute is not present,
         the url of the containing page (read-only)
         """
-        action = self.element.get('action', '')
+        action = self.element.get('action') or ''
         if action == '':
             # HTML5 spec tells us NOT to use the base url
             return self.page.url
@@ -298,7 +298,7 @@ class Form:
         """
         The forms submit method, which is ``GET`` or ``POST``
         """
-        method = self.element.get('method', '')
+        method = self.element.get('method') or ''
         if method.upper() == 'POST':
             return 'POST'
         else:
@@ -336,8 +336,8 @@ class Form:
 
     def __find_input_els(self, *, name: str = None, id: str = None,
                          type: str = None, enabled: bool = None,
-                         checked: bool = None) -> Iterator[ET.Element]:
-        for e in HT.find_all_elements(self.element, id=id):
+                         checked: bool = None) -> Iterator[HT.HtmlElement]:
+        for e in self.element.findall(id=id):
             if e.tag not in ['input', 'select', 'textarea']:
                 continue
 
@@ -489,13 +489,13 @@ class Form:
             type = _get_input_type(i)
             if type in ['radio','checkbox']:
                 if i.get('checked') is not None:
-                    yield (i.get('name', ''), i.get('value', 'on'))
+                    yield (i.get('name') or '', i.get('value') or 'on')
             elif type == 'select':
-                for o in HT.find_all_elements(i, tag='option'):
+                for o in i.iterfind('.//option'):
                     if o.get('selected') is not None:
-                        yield (i.get('name', ''), o.get('value', str(o.text or '')))
+                        yield (i.get('name') or '', o.get('value') or str(o.text or ''))
             else:
-                yield (i.get('name'), i.get('value', ''))
+                yield (i.get('name') or '', i.get('value') or '')
 
     def get_formdata_query(self) -> str:
         """
@@ -543,7 +543,7 @@ class InvalidOptionError(Exception):
 
         If you actually want to set that value, you can create an option element yourself.
     """
-    def __init__(self, selectEl: ET.Element, value: str) -> None:
+    def __init__(self, selectEl: HT.HtmlElement, value: str) -> None:
         super().__init__('Tried to set value to "{0}", but no <option> is available'.format(value))
 
         self.select = selectEl
@@ -552,7 +552,7 @@ class InvalidOptionError(Exception):
         self.value = value
         """ The value that was supposed to be set """
 
-def _get_input_value(el: ET.Element) -> Optional[str]:
+def _get_input_value(el: HT.HtmlElement) -> Optional[str]:
     type = _get_input_type(el)
     if type == 'select':
         # return only option that is selected
@@ -571,7 +571,7 @@ def _get_input_value(el: ET.Element) -> Optional[str]:
     else:
         return el.get('value', '')
 
-def _set_input_value(el: ET.Element, value: str) -> None:
+def _set_input_value(el: HT.HtmlElement, value: str) -> None:
     if el.tag == 'select':
         try:
             # find the option
@@ -593,10 +593,10 @@ def _set_input_value(el: ET.Element, value: str) -> None:
     else:
         el.set('value', value)
 
-def _get_input_type(el: ET.Element) -> str:
+def _get_input_type(el: HT.HtmlElement) -> str:
     if el.tag == 'select':
         return 'select'
     elif el.tag == 'textarea':
         return 'textarea'
     else:
-        return el.get('type', 'text').lower().strip()
+        return (el.get('type') or 'text').lower().strip()

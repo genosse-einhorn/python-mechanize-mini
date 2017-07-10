@@ -23,24 +23,24 @@ class BasicTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/test.html')
         self.assertEqual(test.url, TEST_SERVER + '/test.html')
         self.assertEqual(test.uri, TEST_SERVER + '/test.html')
-        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_3xx(self):
         test = browser.open(TEST_SERVER + '/redirect?test.html')
-        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh?test.html')
-        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_redirect_broken_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh-broken')
-        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(),
+        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(),
             'Not Redirected')
 
     def test_redirect_meta_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect?/redirect-meta.html')
-        self.assertEqual(ET.tostring(test.document.getroot(), method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
 
     def test_too_many_redirects(self):
         with self.assertRaises(minimech.TooManyRedirectsException):
@@ -51,11 +51,11 @@ class BasicTest(unittest.TestCase):
             browser.open(TEST_SERVER + '/gimme4')
 
         self.assertEqual(cm.exception.code, 404)
-        self.assertEqual(cm.exception.page.document.getroot().text, 'there is no content')
+        self.assertEqual(cm.exception.page.document.text, 'there is no content')
 
     def test_additional_headers(self):
         test = browser.open(TEST_SERVER + '/show-headers', additional_headers={'X-Foo': 'bar'})
-        self.assertIn('X-Foo: bar', test.document.getroot().text.split('\n'))
+        self.assertIn('X-Foo: bar', test.document.text.split('\n'))
 
     def test_return_headers(self):
         test = browser.open(TEST_SERVER + '/return-x-headers?bla=foo&BAR=baZ')
@@ -66,33 +66,27 @@ class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = browser.open(TEST_SERVER + '/form.html')
 
-        self.assertEqual(test.find_element(tag='form', n=0).tag, 'form')
+        self.assertEqual(test.find('.//form').tag, 'form')
 
     def test_find_by_class(self):
         test = browser.open(TEST_SERVER + '/elements.html')
 
-        # too many -> exception
-        with self.assertRaises(HT.TooManyElementsFoundError):
-            test.find_element(class_name='important')
-
         # not existing
-        with self.assertRaises(HT.ElementNotFoundError):
-            test.find_element(class_name='nada')
+        self.assertEqual(test.find(class_name='nada'), None)
 
         # not so many
-        with self.assertRaises(HT.ElementNotFoundError):
-            test.find_element(class_name='important', n=10)
+        self.assertEqual(test.find(class_name='important', n=10), None)
 
         # but the third one is ok
-        test.find_element(class_name='important', n=2)
+        self.assertNotEqual(test.find(class_name='important', n=2), None)
 
         # but there should be two of these
-        self.assertEqual(len(list(test.find_all_elements(tag='p', class_name='important'))), 2)
+        self.assertEqual(len(test.findall('.//p', class_name='important')), 2)
 
     def test_find_by_id(self):
         test = browser.open(TEST_SERVER + '/elements.html')
 
-        self.assertEqual(test.find_element(id='importantest').get('id'), 'importantest')
+        self.assertEqual(test.find(id='importantest').get('id'), 'importantest')
 
 class BaseUriTest(unittest.TestCase):
     def test_implicit(self):
@@ -141,29 +135,29 @@ class PageOpenTest(unittest.TestCase):
     def test_referer(self):
         test = browser.open(TEST_SERVER + '/base/relative.html')
         test2 = test.open('../show-headers')
-        self.assertIn('Referer: ' + test.url, test2.document.getroot().text.split('\n'))
+        self.assertIn('Referer: ' + test.url, test2.document.text.split('\n'))
 
         # redirects with HTTP 300x should keep referer intact
         # (not specified by W3C, but this is what every browser does)
         test3 = test.open('../redirect?/show-headers')
-        self.assertIn('Referer: ' + test.url, str(test3.document.getroot().text or '').split('\n'))
+        self.assertIn('Referer: ' + test.url, str(test3.document.text or '').split('\n'))
 
         # redirects with Refresh will change referer
         # (also not specified by W3C and slightly inconsitent between browsers)
         test4 = test.open('/redirect-refresh?show-headers')
         self.assertIn('Referer: ' + TEST_SERVER + '/redirect-refresh?show-headers',
-                      test4.document.getroot().text.split('\n'))
+                      test4.document.text.split('\n'))
 
         # same thing with <meta> refresh
         test5 = test.open('/redirect-meta?show-headers')
         self.assertIn('Referer: ' + TEST_SERVER + '/redirect-meta?show-headers',
-                      test5.document.getroot().text.split('\n'))
+                      test5.document.text.split('\n'))
 
 class HyperlinkTest(unittest.TestCase):
     def test_find_link(self):
         test = browser.open(TEST_SERVER + '/hyperlinks.html')
 
-        first = test.find_element(tag='a', n=0)
+        first = test.find('.//a')
         link1 = test.find_link(n=0)
         self.assertEqual(first, link1)
 
@@ -174,7 +168,7 @@ class HyperlinkTest(unittest.TestCase):
         self.assertEqual(first, link1)
 
         # find_link ignores anchors without href
-        second = test.find_element(tag='a', n=2)
+        second = test.find('.//a', n=2)
         link2 = test.find_link(n=1)
         self.assertEqual(second, link2)
 

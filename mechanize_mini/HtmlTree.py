@@ -12,12 +12,229 @@ elements in tree (and the content will be a child of <html> directly).
 
 """
 
-from html.parser import HTMLParser
+import xml.etree.ElementPath as ElementPath
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 import codecs
 import re
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, Sequence, Iterator, TypeVar
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, \
+        Sequence, Iterator, Iterable, TypeVar, KeysView, ItemsView, cast
+
+THtmlElement = TypeVar('THtmlElement', bound='HtmlElement')
+T = TypeVar('T')
+class HtmlElement(Sequence['HtmlElement']):
+    """
+    An HTML Element
+
+    This is designed to be duck-compatible with :any:`xml.etree.ElementTree.Element`,
+    but is extended with new additional methods
+    """
+
+    def __init__(self, tag: str, attrib: Dict[str,str] = {}, **extra) -> None:
+        """
+        Create a new Element
+
+        TODO: Document Exceptions for subclasses
+        """
+
+        self.tag = tag # type: str
+        """The element tag name (:any:`str`)"""
+
+        self.attrib = attrib.copy() # type: Dict[str,str]
+        """The element's attributes (dictionary str->str)"""
+
+        self.text = '' # type: str
+        """
+        Element text before the first subelement.
+        This is always a :any:`str`
+        """
+
+        self.tail = '' # type: str
+        """
+        Text after this element's end tag up until the next sibling tag.
+        This is always a :any:`str`
+        """
+
+
+        self.attrib.update(extra)
+        self._children = [] # type: List[HtmlElement]
+
+    def makeelement(self: THtmlElement, tag: str, attrib:Dict[str,str]) -> THtmlElement:
+        # Deprecated, just here for compatibility with etree.
+        return self.__class__(tag, attrib)
+
+    def copy(self: THtmlElement) -> THtmlElement:
+        """
+        Make a shallow copy of current element.
+        """
+        elem = self.__class__(self.tag, self.attrib)
+        elem.text = self.text
+        elem.tail = self.tail
+        elem[:] = self
+        return elem
+
+    def append(self, subelement: 'HtmlElement') -> None:
+        """
+        Add a new child element
+        """
+        self._children.append(subelement)
+
+    def extend(self, elements: Iterable['HtmlElement']) -> None:
+        """
+        Add multiple elements
+        """
+        for element in elements:
+            self.append(element)
+
+    def insert(self, index: int, subelement: 'HtmlElement') -> None:
+        """Insert a given child at the given position."""
+        self._children.insert(index, subelement)
+
+    def remove(self, subelement: 'HtmlElement') -> None:
+        """Remove the given child element"""
+        self._children.remove(subelement)
+
+    def getchildren(self) -> Sequence['HtmlElement']:
+        # deprecated, just here for etree compat
+        return self._children
+
+    def find(self, path:str='.//', namespaces:Dict[str,str]=None, *,
+             id:str=None, class_name:str=None, text:str=None, n:int=0) -> Optional['HtmlElement']:
+        """
+        Find first element matching the given conditions.
+
+        See: findall
+        """
+        els = self.iterfind(path, namespaces, id=id, class_name=class_name, text=text)
+        retval = next(els, None)
+        for i in range(1, n+1):
+            try:
+                retval = next(els)
+            except StopIteration as e:
+                return None
+
+        return retval
+
+
+    def findall(self, path:str='.//', namespaces:Dict[str,str]=None, *,
+             id:str=None, class_name:str=None, text:str=None) -> List['HtmlElement']:
+        return list(self.iterfind(path, namespaces, id=id, class_name=class_name, text=text))
+
+    def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, *,
+                 id:str=None, class_name:str=None, text:str=None) -> Iterator['HtmlElement']:
+        # FIXME: fighting against the type checker
+        for eltmp in ElementPath.iterfind(self, path, namespaces): # type: ignore
+            el = cast(HtmlElement, eltmp)
+
+            if id is not None:
+                if el.get('id') != id:
+                    continue
+
+            if class_name is not None:
+                if class_name not in (el.get('class') or '').split():
+                    continue
+
+            if text is not None:
+                if el.text_content != text:
+                    continue
+
+            yield el
+
+    def findtext(self, path, default=None, namespaces=None):
+        return ElementPath.findtext(self, path, default, namespaces)
+
+    def clear(self) -> None:
+        self.attrib.clear()
+        self._children = []
+        self.text = ''
+        self.tail = ''
+
+    def get(self, key: str, default:T=None) -> Union[str,T,None]:
+        """
+        Get an attribute value.
+        """
+        return self.attrib.get(key, default)
+
+    def set(self, key: str, value: str) -> None:
+        """
+        Set an attribute
+        """
+        self.attrib[key] = value
+
+    def keys(self) -> KeysView[str]:
+        """
+        List of attribute names
+        """
+        return self.attrib.keys()
+
+    def items(self) -> ItemsView[str,str]:
+        """
+        Attributes as (key, value) sequence
+        """
+        return self.attrib.items()
+
+    def iter(self, tag:str=None) -> Iterator['HtmlElement']:
+        if tag == "*":
+            tag = None
+
+        if tag is None or self.tag == tag:
+            yield self
+
+        for e in self._children:
+            yield from e.iter(tag)
+
+    def getiterator(self, tag:str=None) -> List['HtmlElement']:
+        # deprectated, just for etree compat
+        return list(self.iter(tag))
+
+    def itertext(self) -> Iterator[str]:
+        if self.text:
+            yield self.text
+
+        for e in self:
+            yield from e.itertext()
+            if e.tail:
+                yield e.tail
+
+    @property
+    def text_content(self) -> str:
+        """
+        Return the textual content of the element,
+        with all html tags removed and whitespace-normalized.
+
+        Example
+        -------
+
+        >>> import mechanize_mini.HtmlTree as HT
+        >>> element = HT.HTML('<p>foo <i>bar    </i>\\nbaz</p>')
+        >>> element.text_content
+        'foo bar baz'
+        """
+
+        # let python walk the tree and get the text for us
+        c = ET.tostring(self, method='text', encoding='unicode') # type: ignore
+
+        # now whitespace-normalize.
+        # FIXME: is ascii enough or should we dig into unicode whitespace here?
+        return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
+
+    def __len__(self) -> int:
+        return len(self._children)
+
+    def __bool__(self) -> bool:
+        # TODO: Python docs say something about deprecation, keep an eye on that
+        return len(self._children) != 0
+
+    def __getitem__(self, index):
+        return self._children[index]
+
+    def __setitem__(self, index: int, element: 'HtmlElement') -> None:
+        self._children[index] = element
+
+    def __delitem__(self, index: int) -> None:
+        del self._children[index]
+
 
 class _TreeBuildingHTMLParser(HTMLParser):
     default_scope_els = ['applet', 'caption', 'table', 'marquee', 'object', 'template']
@@ -37,11 +254,11 @@ class _TreeBuildingHTMLParser(HTMLParser):
     def __init__(self):
         super().__init__()
 
-        self.element_stack = [ET.Element('html')]
+        self.element_stack = [HtmlElement('html')]
 
         self.format_stack = [] # type: List[Tuple[str, Dict[str, str]]]
 
-    def finish(self) -> ET.Element:
+    def finish(self) -> HtmlElement:
         # remove whitespace-only text nodes before <head>
         if (len(self.element_stack[0]) > 0
                 and self.element_stack[0][0].tag in ['head', 'body']
@@ -67,7 +284,7 @@ class _TreeBuildingHTMLParser(HTMLParser):
         return False
 
     def open_tag(self, tag: str, attrs: Dict[str, str] = {}) -> None:
-        el = ET.Element(tag, attrs)
+        el = HtmlElement(tag, attrs)
         self.element_stack[-1].append(el)
         self.element_stack.append(el)
 
@@ -183,12 +400,12 @@ class _TreeBuildingHTMLParser(HTMLParser):
             self.close_formatting_tag(tag, attrs)
 
             # implant formatting tag(s) into element
-            formatel = ET.Element(tag, attrs)
+            formatel = HtmlElement(tag, attrs)
             formatel.text = el.text
             formatel.extend(list(el))
             for child in list(el):
                 el.remove(child)
-            el.text = None
+            el.text = ''
             el.append(formatel)
 
             # push el on stack again
@@ -346,7 +563,7 @@ def detect_charset(html: bytes, charset: str = None) -> str:
 
     return charset
 
-def parsefragmentstr(html: str) -> ET.Element:
+def parsefragmentstr(html: str) -> HtmlElement:
     """
     Parse a HTML fragment into an element tree
 
@@ -356,19 +573,22 @@ def parsefragmentstr(html: str) -> ET.Element:
     """
 
     et = parsehtmlstr(html)
-    if (len(et.getroot()) == 1
-                and str(et.getroot().text or '').strip() == ''
-                and str(et.getroot()[0].tail or '').strip() == ''):
-        et.getroot()[0].tail = ''
-        return et.getroot()[0]
+    if (len(et) == 1
+                and et.text.strip() == ''
+                and et[0].tail.strip() == ''):
+        et[0].tail = ''
+        return et[0]
     else:
         # if the fragment consisted of more than one element, this is the best
         # we can do besides throwing an error
-        return et.getroot()
+        return et
 
-def parsehtmlstr(html: str) -> ET.ElementTree:
+def parsehtmlstr(html: str) -> HtmlElement:
     """
-    Parse a HTML document into an element tree
+    Parse a complete HTML document into an element tree
+
+    The root element will always be <html>, even if that was not actually
+    present in the original page
     """
 
     # remove BOM
@@ -378,16 +598,16 @@ def parsehtmlstr(html: str) -> ET.ElementTree:
     parser = _TreeBuildingHTMLParser()
     parser.feed(html)
     parser.close()
-    return ET.ElementTree(parser.finish())
+    return parser.finish()
 
-def parsefile(filename: str) -> ET.ElementTree:
+def parsefile(filename: str) -> HtmlElement:
     """
     Parse a HTML file into an element tree
     """
     with open(filename, 'rb') as f:
         return parsehtmlbytes(f.read())
 
-def parsehtmlbytes(html: bytes, charset:str = None) -> ET.ElementTree:
+def parsehtmlbytes(html: bytes, charset:str = None) -> HtmlElement:
     """
     Parse a HTML document into an element tree
 
@@ -431,61 +651,7 @@ class ElementNotFoundError(Exception):
 class TooManyElementsFoundError(Exception):
     """ One element was requested, but multiple were found """
 
-def find_all_elements(context: ET.Element, *, tag: str = None,
-        id: str = None, class_name: str = None, text: str = None) -> Iterator[ET.Element]:
-    """
-    Finds HTML elements which are descendants of the given context element.
-    The keyowrd arguments specify search criteria.
-
-    **tag** (:py:obj:`str`)
-        Find only elements with the given tag
-    **id** (:py:obj:`str`)
-        Find only elements with the given ``id`` attribute
-    **class_name** (:py:obj:`str`)
-        Find only elements where the ``class`` attribute contains the given class
-    **text** (:py:obj:`str`)
-        Find only elements where the whitespace-normalized text content
-        (as returned by :any:`mechanize_mini.HtmlTree.text_content`)
-        equals the given text.
-    """
-
-    if tag is not None:
-        l = context.iter(tag)
-    else:
-        l = context.iter()
-
-    for el in l:
-        if id is not None:
-            if el.get('id') != id:
-                continue
-
-        if class_name is not None:
-            if class_name not in el.get('class', '').split():
-                continue
-
-        if text is not None:
-            if text_content(el) != text:
-                continue
-
-        yield el
-
-def find_element(context: ET.Element, n: int = None, **kwargs) -> ET.Element:
-    """
-    Like :any:`find_all_elements`, but returns exactly one element.
-
-    If `n` is specified, then the n-th match will be returned. If `n` is None,
-    only one matching element is allowed (and will be returned).
-
-    Raises
-    ------
-    ElementNotFoundError
-        If there is no matching (n-th) element
-    TooManyElementsFoundError
-        If `n` is None but more than one match was found
-    """
-    return _get_exactly_one(find_all_elements(context, **kwargs), n)
-
-def HTML(text: str) -> ET.Element:
+def HTML(text: str) -> HtmlElement:
     """
     Parses a HTML fragment from a string constant. This function can be used to embed "HTML literals" in Python code
     """

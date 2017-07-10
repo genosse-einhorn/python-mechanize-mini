@@ -143,7 +143,7 @@ class Browser:
                 # referer change
                 additional_headers = {**additional_headers, 'Referer': urldefrag(page.url).url}
 
-        if ((page.status == 200) and not (page.document.getroot() is None)):
+        if ((page.status == 200) and not (page.document is None)):
             # look for meta tag
             for i in page.document.iter('meta'):
                 h = str(i.get('http-equiv') or '')
@@ -215,9 +215,9 @@ class Page:
         rules as specified by WHATWG (e.g. treating ASCII as windows-1252).
         """
 
-        self.document = HT.parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: ET.ElementTree
+        self.document = HT.parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: HT.HtmlElement
         """
-        The parsed document (:py:obj:`ET.ElementTree`)
+        The parsed document (:py:obj:`HT.HtmlElement`)
         """
 
     @property
@@ -239,10 +239,10 @@ class Page:
 
         # NOTE: at the moment, the html parser cannot fail and will
         # always return something. This is just defensive programming here
-        if not (self.document.getroot() is None): # pragma: no branch
+        if not (self.document is None): # pragma: no branch
             bases = self.document.findall('.//base[@href]')
             if len(bases) > 0:
-                base = urljoin(self.url, bases[0].get('href').strip())
+                base = urljoin(self.url, (bases[0].get('href') or '').strip())
 
         return urldefrag(base).url
 
@@ -256,35 +256,17 @@ class Page:
         """ Alias for :any:`url` (read-only str)"""
         return self.url
 
-    def find_all_elements(self, *, context: ET.Element = None, tag: str = None,
-            id: str = None, class_name: str = None, text: str = None) -> Iterator[ET.Element]:
-        """
-        Finds HTML elements in the given page. The keyowrd arguments specify
-        search criteria which are evaluated in conjunction.
+    def find(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Optional[HT.HtmlElement]:
+        return self.document.find(path, namespaces, **kwargs)
 
-        **context** (:py:obj:`ET.Element`)
-            Find only elements which are descendants of the given element
-        **tag** (:py:obj:`str`)
-            Find only elements with the given tag
-        **id** (:py:obj:`str`)
-            Find only elements with the given ``id`` attribute
-        **class_name** (:py:obj:`str`)
-            Find only elements where the ``class`` attribute contains the given class
-        **text** (:py:obj:`str`)
-            Find only elements where the whitespace-normalized text content
-            (as returned by :any:`mechanize_mini.HtmlTree.text_content`)
-            equals the given text.
-        """
 
-        if context is None:
-            context = self.document.getroot()
+    def findall(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> List[HT.HtmlElement]:
+        return self.document.findall(path, namespaces, **kwargs)
 
-        return HT.find_all_elements(context, tag=tag, id=id, class_name=class_name, text=text)
+    def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Iterator[HT.HtmlElement]:
+        return self.document.iterfind(path, namespaces, **kwargs)
 
-    def find_element(self, *, n: int = None, **kwargs) -> ET.Element:
-        return HT._get_exactly_one(self.find_all_elements(**kwargs), n)
-
-    def find_all_forms(self, *, context: ET.Element = None, id: str = None, name: str = None) -> Iterator[forms.Form]:
+    def find_all_forms(self, *, context: HT.HtmlElement = None, id: str = None, name: str = None) -> Iterator[forms.Form]:
         """
         Finds <form> elements in the given page and returns :any:`forms.Form` instances
 
@@ -298,7 +280,9 @@ class Page:
             Find only forms with the given ``name`` attribute (usually, there is only one)
         """
 
-        for i in self.find_all_elements(context=context, id=id, tag='form'):
+        context = context or self.document
+
+        for i in context.iterfind('.//form', id=id):
             if name is not None:
                 if i.get('name') != name:
                     continue
@@ -309,8 +293,8 @@ class Page:
         return HT._get_exactly_one(self.find_all_forms(**kwargs), n)
 
     # TODO: investigate usefulness of link type
-    def find_all_links(self, *, context: ET.Element = None, id: str = None, class_name: str = None,
-                       url: str = None, text: str = None) -> Iterator[ET.Element]:
+    def find_all_links(self, *, context: HT.HtmlElement = None, id: str = None, class_name: str = None,
+                       url: str = None, text: str = None) -> Iterator[HT.HtmlElement]:
         """
         Finds all matching hyperlinks (``<a href=...>``) in the document.
 
@@ -328,19 +312,18 @@ class Page:
             Return only hyperlinks where the normalized link text (as returned
             by :any:`mechanize_mini.HtmlTree.text_content`) equals the given string
         """
-        for i in self.find_all_elements(tag='a', context=context, id=id, class_name=class_name):
+        context = context or self.document
+
+        for i in context.iterfind('.//a', id=id, class_name=class_name, text=text):
             if i.get('href') is None:
                 continue
 
             if url is not None and i.get('href') != url:
                     continue
 
-            if text is not None and HT.text_content(i) != text:
-                continue
-
             yield i
 
-    def find_link(self, *, n: int = None, **kwargs) -> ET.Element:
+    def find_link(self, *, n: int = None, **kwargs) -> HT.HtmlElement:
         """
         Like :any:`find_all_links`, but returns the n-th link found.
 
@@ -354,7 +337,7 @@ class Page:
 
         Returns the new page.
         """
-        return self.open(self.find_link(**kwargs).get('href'))
+        return self.open(self.find_link(**kwargs).get('href') or '')
 
 
     def open(self, url: str, **kwargs) -> 'Page':

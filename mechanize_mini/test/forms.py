@@ -77,7 +77,7 @@ class FormAccessorTest(unittest.TestCase):
         page = browser.open(TEST_SERVER + '/form.html')
         form = Form(list(page.document.iter('form'))[1], page)
 
-        foo = next(x for x in page.find_all_elements(context=form.element) if x.get('name') == 'foo')
+        foo = next(x for x in form.element.iterfind() if x.get('name') == 'foo')
         form.set_field('foo', 'baz')
         self.assertEqual(foo.get('value'), 'baz')
 
@@ -86,12 +86,12 @@ class FormAccessorTest(unittest.TestCase):
         # set option with text
         form.set_field('checker', 'Text is Value')
         self.assertEqual(form.get_field('checker'), 'Text is Value')
-        self.assertEqual(page.find_element(tag='option', text='Text is Value').get('selected'), 'selected')
+        self.assertEqual(page.find('.//option', text='Text is Value').get('selected'), 'selected')
 
         # set option with custom value
         form.set_field('checker', 'theval')
         self.assertEqual(form.get_field('checker'), 'theval')
-        self.assertEqual(page.find_element(id='val1').get('selected'), 'selected')
+        self.assertEqual(page.find(id='val1').get('selected'), 'selected')
 
         # set nonexistent option
         with self.assertRaises(minimech.forms.InvalidOptionError) as cm:
@@ -309,26 +309,26 @@ class InputTest(unittest.TestCase):
 
         # works with sets
         i.options.set_selected({'b','a'})
-        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), 'selected')
+        self.assertEqual(i.element.find('.//option', n=0).get('selected'), 'selected')
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), 'selected')
         self.assertEqual(i.options.get_selected(), ['a','b'])
 
         # also works with lists
         i.options.set_selected(['a'])
-        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=0).get('selected'), 'selected')
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), None)
         self.assertEqual(i.options.get_selected(), ['a'])
 
         # can individually select options
         i.options['b'].selected = True
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), 'selected')
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), 'selected')
 
         # and unselect them
         i.options['b'].selected = False
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), None)
         # and unselect them again for code coverage masturbation
         i.options['b'].selected = False
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), None)
         self.assertEqual(i.options['b'].selected, False)
 
         # bogus option accessors throw
@@ -337,8 +337,8 @@ class InputTest(unittest.TestCase):
 
         # can also clear select status
         i.options.set_selected(iter([]))
-        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), None)
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=0).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), None)
         self.assertEqual(i.options.get_selected(), [])
 
         # oh and btw we can also retrieve the number of options
@@ -346,8 +346,8 @@ class InputTest(unittest.TestCase):
 
         # and - rogue feature which doesn't type check - you can assign an option to value
         i.value = i.options[0]
-        self.assertEqual(HT.find_element(i.element, tag='option', n=0).get('selected'), 'selected')
-        self.assertEqual(HT.find_element(i.element, tag='option', n=1).get('selected'), None)
+        self.assertEqual(i.element.find('.//option', n=0).get('selected'), 'selected')
+        self.assertEqual(i.element.find('.//option', n=1).get('selected'), None)
         self.assertEqual(i.options.get_selected(), ['a'])
 
         # raises for invalid options
@@ -464,7 +464,7 @@ class SubmitTest(unittest.TestCase):
             </form>
             """), page)
         result = form.submit()
-        self.assertEqual(result.document.getroot().text,
+        self.assertEqual(result.document.text,
             'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
 
     def test_bogus_encoding(self):
@@ -475,7 +475,7 @@ class SubmitTest(unittest.TestCase):
             </form>
             """), page)
         result = form.submit()
-        self.assertEqual(result.document.getroot().text, 'name=Müßtérmañ\n')
+        self.assertEqual(result.document.text, 'name=Müßtérmañ\n')
 
     def test_post(self):
         page = browser.open(TEST_SERVER + '/form.html')
@@ -496,7 +496,7 @@ class SubmitTest(unittest.TestCase):
             </form>
             """), page)
         result = form.submit()
-        self.assertEqual(result.document.getroot().text,
+        self.assertEqual(result.document.text,
             'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ import mechanize_mini.HtmlTree as HT
 class XmlEquivTest(unittest.TestCase):
     def assertHtmlEqualsXml(self, html, xml, *, strict_whitespace=True):
         htree = HT.parsehtmlstr(html)
-        xtree = ET.ElementTree(ET.fromstring(xml))
+        xtree = ET.fromstring(xml)
 
         if not strict_whitespace:
             # strip all texts in both trees
@@ -20,8 +20,8 @@ class XmlEquivTest(unittest.TestCase):
                 el.text = str(el.text or '').strip()
                 el.tail = str(el.tail or '').strip()
 
-        self.assertEqual(ET.tostring(htree.getroot()),
-                         ET.tostring(xtree.getroot()))
+        self.assertEqual(ET.tostring(htree),
+                         ET.tostring(xtree))
 
     def assertHtmlEqualsXmlFragment(self, html, xml, *, strict_whitespace=True):
         htree = ET.ElementTree(HT.parsefragmentstr(html))
@@ -39,6 +39,60 @@ class XmlEquivTest(unittest.TestCase):
         self.assertEqual(ET.tostring(htree.getroot()),
                          ET.tostring(xtree.getroot()))
 
+class EtreeCompatTest(XmlEquivTest):
+    def test_makeelement(self):
+        el = HT.HTML('<bla />')
+        el2 = el.makeelement('blub', {'foo':'bar'})
+        self.assertEqual(type(el), type(el2))
+        self.assertEqual(el2.tag, 'blub')
+        self.assertEqual(el2.get('foo'), 'bar')
+
+    def test_clone(self):
+        el = HT.HTML('<bla bar=baz foo=bar><blub>')
+        el2 = el.copy()
+        self.assertEqual(el[0], el2[0])
+        self.assertEqual(el.tag, el2.tag)
+        self.assertEqual(el.attrib, el2.attrib)
+        self.assertNotEqual(el, el2)
+
+    def test_keys_items(self):
+        el = HT.HTML('<bla bar=baz foo=bar><blub>')
+        self.assertEqual(el.keys(), {'bar', 'foo'})
+        self.assertEqual(set(el.items()), {('bar','baz'), ('foo', 'bar')})
+
+    def test_insert(self):
+        el = HT.HTML('<bla><blub>')
+        el.insert(0, HT.HtmlElement('foo'))
+        self.assertEqual(ET.tostring(el, encoding='unicode'), '<bla><foo /><blub /></bla>')
+
+    def test_getchildren(self):
+        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        self.assertEqual(el.getchildren(), list(el))
+
+    def test_getiterator(self):
+        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        self.assertEqual(el.getiterator(), list(el.iter()))
+
+    def test_findtext(self):
+        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        self.assertEqual(el.findtext('.//em'), 'hey')
+
+    def test_clear(self):
+        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        el.clear()
+
+        self.assertEqual(len(el), 0)
+        self.assertEqual(el.tag, 'bla')
+        self.assertEqual(el.tail, '')
+        self.assertEqual(el.text, '')
+        self.assertEqual(el.attrib, {})
+
+    def test_bool(self):
+        el = HT.HTML('<bla>')
+        self.assertFalse(el)
+
+        el = HT.HTML('<bla><blub>')
+        self.assertTrue(el)
 
 class BasicTest(XmlEquivTest):
     def test_empty(self):
@@ -313,13 +367,13 @@ class TestFormatMisnesting(XmlEquivTest):
     def test_for_coverage(self):
         self.assertHtmlEqualsXmlFragment('<div><i>bla</div></i>', '<div><i>bla</i></div>')
 
-class TestCharsetDetection(unittest.TestCase):
+class TestCharsetDetection(XmlEquivTest):
     def assertCodecEqual(self, a, b):
         self.assertEqual(codecs.lookup(a).name, codecs.lookup(b).name)
 
     def assertHtmlEqualsXml(self, html, xml, charset=None):
         htree = HT.parsehtmlbytes(html, charset)
-        xtree = ET.ElementTree(ET.fromstring(xml))
+        xtree = ET.fromstring(xml)
 
         # prune empty text nodes from xml
         for el in xtree.iter():
@@ -328,8 +382,8 @@ class TestCharsetDetection(unittest.TestCase):
             if str(el.tail).strip() == '':
                 el.tail = None
 
-        self.assertEqual(ET.tostring(htree.getroot()),
-                         ET.tostring(xtree.getroot()))
+        self.assertEqual(ET.tostring(htree),
+                         ET.tostring(xtree))
 
     def test_default(self):
         self.assertCodecEqual(HT.detect_charset(b''), 'cp1252')
@@ -390,42 +444,41 @@ class TestCharsetDetection(unittest.TestCase):
 class TestConvenience(unittest.TestCase):
     def test_text_content(self):
         content = HT.parsefragmentstr('bla')
-        self.assertEqual(HT.text_content(content), 'bla')
+        self.assertEqual(content.text_content, 'bla')
 
         el = HT.parsefragmentstr('<p>bla <b>blub    </b>\n<i>hola</p>')
-        self.assertEqual(HT.text_content(el), 'bla blub hola')
+        self.assertEqual(el.text_content, 'bla blub hola')
 
 class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')
 
-        self.assertEqual(HT.find_element(test.getroot(), tag='form', n=0).tag, 'form')
+        self.assertEqual(test.find('form').tag, 'form')
 
     def test_find_by_class(self):
         test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
-        # too many -> exception
-        with self.assertRaises(HT.TooManyElementsFoundError):
-            HT.find_element(test.getroot(), class_name='important')
-
         # not existing
-        with self.assertRaises(HT.ElementNotFoundError):
-            HT.find_element(test.getroot(), class_name='nada')
+        self.assertEqual(test.find(class_name='nada'), None)
 
         # not so many
-        with self.assertRaises(HT.ElementNotFoundError):
-            HT.find_element(test.getroot(), class_name='important', n=10)
+        self.assertEqual(test.find(class_name='important', n=10), None)
 
         # but the third one is ok
-        HT.find_element(test.getroot(), class_name='important', n=2)
+        self.assertNotEqual(test.find(class_name='important', n=2), None)
 
         # but there should be two of these
-        self.assertEqual(len(list(HT.find_all_elements(test.getroot(), tag='p', class_name='important'))), 2)
+        self.assertEqual(len(test.findall('.//p', class_name='important')), 2)
 
     def test_find_by_id(self):
         test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
-        self.assertEqual(HT.find_element(test, id='importantest').get('id'), 'importantest')
+        self.assertEqual(test.find(id='importantest').get('id'), 'importantest')
+
+    def test_find_by_text(self):
+        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+
+        self.assertEqual(test.find(text='I am even more importanter').get('class'), 'bar baz important')
 
 
 if __name__ == '__main__':
