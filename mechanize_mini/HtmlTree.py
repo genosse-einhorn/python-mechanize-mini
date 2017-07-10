@@ -622,29 +622,6 @@ def parsehtmlbytes(html: bytes, charset:str = None) -> HtmlElement:
 
     return parsehtmlstr(str(html, charset, 'replace'))
 
-def text_content(element: ET.Element) -> str:
-    """
-    Convenience Function: Returns the textual content of the element,
-    with all html tags removed and whitespace-normalized.
-
-    Example
-    -------
-
-    >>> import mechanize_mini.HtmlTree as HT
-    >>> element = HT.parsefragmentstr('<p>foo <i>bar    </i>\\nbaz</p>')
-    >>> HT.text_content(element)
-    'foo bar baz'
-    """
-
-    # let python walk the tree and get the text for us
-    c = ET.tostring(element, method='text', encoding='unicode')
-
-    # now whitespace-normalize.
-    # FIXME: is ascii enough or should we dig into unicode whitespace here?
-    return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
-
-
-
 class ElementNotFoundError(Exception):
     """ No element has been found """
 
