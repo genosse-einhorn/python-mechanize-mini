@@ -5,9 +5,9 @@ from urllib.parse import urljoin, urldefrag
 import re
 import xml.etree.ElementTree as ET
 from . import HtmlTree as HT
-from . import forms
 
-from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, IO
+from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, \
+    IO, Sequence, Iterable, cast
 
 class _NoHttpRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, hdrs, newurl):
@@ -220,6 +220,10 @@ class Page:
         The parsed document (:py:obj:`HT.HtmlElement`)
         """
 
+        # fixup form page backreferences
+        for f in self.forms:
+            f.page = self
+
     @property
     def baseuri(self) -> str:
         """
@@ -266,31 +270,9 @@ class Page:
     def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Iterator[HT.HtmlElement]:
         return self.document.iterfind(path, namespaces, **kwargs)
 
-    def find_all_forms(self, *, context: HT.HtmlElement = None, id: str = None, name: str = None) -> Iterator[forms.Form]:
-        """
-        Finds <form> elements in the given page and returns :any:`forms.Form` instances
-
-        The keyword arguments specify search criteria:
-
-        **context** (:py:obj:`ET.Element`)
-            Find only forms which are descendants of the given element
-        **id** (:py:obj:`str`)
-            Find only forms with the given ``id`` attribute (there should be only one)
-        **name** (:py:obj:`str`)
-            Find only forms with the given ``name`` attribute (usually, there is only one)
-        """
-
-        context = context or self.document
-
-        for i in context.iterfind('.//form', id=id):
-            if name is not None:
-                if i.get('name') != name:
-                    continue
-
-            yield forms.Form(i, self)
-
-    def find_form(self, *, n:int = None, **kwargs) -> forms.Form:
-        return HT._get_exactly_one(self.find_all_forms(**kwargs), n)
+    @property
+    def forms(self) -> 'HtmlFormsCollection':
+        return HtmlFormsCollection(self.document.iterfind('.//form'))
 
     # TODO: investigate usefulness of link type
     def find_all_links(self, *, context: HT.HtmlElement = None, id: str = None, class_name: str = None,
@@ -358,3 +340,34 @@ class Page:
 
         return self.browser.open(urljoin(self.baseuri, url), **kwargs)
 
+class HtmlFormsCollection(Sequence[HT.HtmlFormElement]):
+    """
+    A list of <form> elements
+
+    This is a sequence type (like a list), but you can also access elements by their name
+
+    TODO: Example
+    """
+    def __init__(self, els: Iterable[HT.HtmlElement]) -> None:
+        self.__backing_list = [cast(HT.HtmlFormElement, el) for el in els]
+
+    # FIXME: key is Union[str,int] -> HtmlFormElement, but mypy doesn't like that
+    def __getitem__(self, key):
+        """
+        Retrieve an option from the option list.
+
+        In addition to slices and integers, you can also pass strings as key,
+        then the option will be found by its value.
+        """
+        if isinstance(key, str):
+            # find option by value
+            for o in self.__backing_list:
+                if o.name == key:
+                    return o
+
+            raise IndexError("No element with name '{0}' found".format(key))
+        else:
+            return self.__backing_list[key]
+
+    def __len__(self) -> int:
+        return len(self.__backing_list)

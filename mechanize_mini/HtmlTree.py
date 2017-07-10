@@ -12,6 +12,7 @@ elements in tree (and the content will be a child of <html> directly).
 
 """
 
+from urllib.parse import urljoin, urlencode
 import xml.etree.ElementPath as ElementPath
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -19,7 +20,11 @@ import codecs
 import re
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, IO, \
-        Sequence, Iterator, Iterable, TypeVar, KeysView, ItemsView, cast
+        Sequence, Iterator, Iterable, TypeVar, KeysView, ItemsView, cast, TYPE_CHECKING
+
+# HACK: Circular import is not needed at runtime, but the type checker requires it
+if TYPE_CHECKING: # pragma: no cover
+    from . import Browser, Page
 
 THtmlElement = TypeVar('THtmlElement', bound='HtmlElement')
 T = TypeVar('T')
@@ -30,6 +35,20 @@ class HtmlElement(Sequence['HtmlElement']):
     This is designed to be duck-compatible with :any:`xml.etree.ElementTree.Element`,
     but is extended with new additional methods
     """
+
+    def __new__(cls, *args, **kwargs) -> 'HtmlElement':
+        tag = args[0].lower()
+
+        if (tag == 'option') and not issubclass(cls, HtmlOptionElement):
+            return HtmlOptionElement(*args, **kwargs)
+
+        if (tag in ['select', 'input', 'textarea']) and not issubclass(cls, HtmlInputElement):
+            return HtmlInputElement(*args, **kwargs)
+
+        if (tag in ['form']) and not issubclass(cls, HtmlFormElement):
+            return HtmlFormElement(*args, **kwargs)
+
+        return super().__new__(cls)
 
     def __init__(self, tag: str, attrib: Dict[str,str] = {}, **extra) -> None:
         """
@@ -219,6 +238,18 @@ class HtmlElement(Sequence['HtmlElement']):
         # FIXME: is ascii enough or should we dig into unicode whitespace here?
         return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
 
+    @property
+    def id(self) -> Optional[str]:
+        """
+        Represents the ``id`` attribute on the element, or None if
+        the attribute is not present (read-only)
+        """
+        return self.get('id')
+
+    @id.setter
+    def id(self, id: str) -> None:
+        self.set('id', id)
+
     def __len__(self) -> int:
         return len(self._children)
 
@@ -234,6 +265,533 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def __delitem__(self, index: int) -> None:
         del self._children[index]
+
+class InputNotFoundError(Exception):
+    """
+    No matching ``<input>`` element has been found
+    """
+
+class UnsupportedFormError(Exception):
+    """
+    The <form> does weird things which the called method cannot handle, e.g.:
+
+    * multiple input elements with the same name which are not radio buttons
+    * multiple select options are selected where only one is expected
+    * multiple radio buttons are selected
+    """
+
+class InvalidOptionError(Exception):
+    """
+    Raised if you try to set a value for a <select> element for which there is
+    no <option> element
+
+    .. note::
+
+        If you actually want to set that value, you can create an option element yourself.
+    """
+    def __init__(self, selectEl: HtmlElement, value: str) -> None:
+        super().__init__('Tried to set value to "{0}", but no <option> is available'.format(value))
+
+        self.select = selectEl
+        """ The select element """
+
+        self.value = value
+        """ The value that was supposed to be set """
+
+
+class HtmlOptionElement(HtmlElement):
+    """
+    An ``<option>`` element
+    """
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    @property
+    def value(self) -> str:
+        """ The ``value`` associated with that option (read-only str) """
+        return self.get('value') or str(self.text)
+
+    @property
+    def selected(self) -> bool:
+        """ Whether the option is selected (bool, read-write) """
+        return self.get('selected') is not None
+
+    @selected.setter
+    def selected(self, selected: bool) -> None:
+        if selected:
+            self.set('selected', 'selected')
+        else:
+            if self.get('selected') is not None:
+                del self.attrib['selected']
+
+    def __str__(self) -> str:
+        return self.value
+
+class HtmlOptionCollection(Sequence[HtmlOptionElement]):
+    """
+    Interface a list of ``<option>`` tags
+
+    This is a sequence type (like a list), but you can also access options by their values
+
+    TODO: Example
+    """
+    def __init__(self, option_els: Iterable[HtmlElement]) -> None:
+        self.__backing_list = [cast(HtmlOptionElement, el) for el in option_els]
+
+    # FIXME: key is Union[str,int] -> HtmlOptionElement, but mypy doesn't like that
+    def __getitem__(self, key):
+        """
+        Retrieve an option from the option list.
+
+        In addition to slices and integers, you can also pass strings as key,
+        then the option will be found by its value.
+        """
+        if isinstance(key, str):
+            # find option by value
+            for o in self.__backing_list:
+                if o.value == key:
+                    return o
+
+            raise IndexError("No option with value '{0}' found".format(key))
+        else:
+            return self.__backing_list[key]
+
+    def __len__(self) -> int:
+        return len(self.__backing_list)
+
+    def get_selected(self) -> Sequence[str]:
+        """ Returns a list of selected option values """
+        return [o.value for o in self if o.selected]
+
+    def set_selected(self, values: Iterable[str]) -> None:
+        """ Selects all options with the given values (and unselects everything else) """
+        avail_values = {o.value for o in self}
+        selected_values = set(values)
+
+        illegal_values = selected_values - avail_values
+        if len(illegal_values) > 0:
+            raise UnsupportedFormError('the following options are not valid for this <select> element: ' + str(illegal_values))
+
+        for o in self:
+            o.selected = o.value in selected_values
+
+
+class HtmlInputElement(HtmlElement):
+    """
+    Wraps an ``<input>``, ``<select>`` or ``<textarea>`` element
+    """
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    @property
+    def name(self) -> Optional[str]:
+        """ The ``name`` attribute of the HTML element """
+        return self.get('name')
+
+    @name.setter
+    def name(self, name: str) -> None:
+        self.set('name', name)
+
+    @property
+    def type(self) -> str:
+        """
+        The type of the input element (read-only)
+
+        This can be ``'select'``, ``'textarea'`` or any of the valid ``type=`` attributes
+        for the html ``<input>`` element.
+        """
+        if self.tag == 'select':
+            return 'select'
+        elif self.tag == 'textarea':
+            return 'textarea'
+        else:
+            return (self.get('type') or 'text').lower().strip()
+
+    @property
+    def value(self) -> Optional[str]:
+        """
+        The value associated with the HTML element
+
+        * If the input with the given name is a ``<select>`` element, this allows
+          you to read the currently selected option or select exactly one of
+          the available options.
+        * For all other elements, this represents the ``value`` attribute.
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.options` instead.
+        * If you want to select one of multiple radio buttons, look at :any:`Form.set_field`
+        * For checkboxes, you usually want to check them and not mess with their values
+        """
+        type = self.type
+        if type == 'select':
+            # return first option that is selected
+            selected = [e for e in self.iter('option') if e.get('selected') is not None]
+
+            if len(selected) == 1:
+                return selected[0].get('value', selected[0].text)
+            elif len(selected) == 0:
+                return None
+            else:
+                raise UnsupportedFormError("More than one <option> is selected")
+        elif type == 'textarea':
+            return self.text
+        elif type in ['radio', 'checkbox']:
+            return self.get('value', 'on')
+        else:
+            return self.get('value', '')
+
+    @value.setter
+    def value(self, val: str) -> None:
+        if self.type == 'select':
+            self.options.set_selected([str(val)])
+        elif self.type == 'textarea':
+            self.text = val
+        else:
+            self.set('value', val)
+
+    @property
+    def enabled(self) -> bool:
+        """
+        Whether the element is not disabled
+
+        Wraps the ``disabled`` attribute of the HTML element.
+        """
+        return self.get('disabled') == None
+
+    @enabled.setter
+    def enabled(self, is_enabled: bool) -> None:
+        if is_enabled:
+            if self.get('disabled') is not None:
+                del self.attrib['disabled']
+        else:
+            self.set('disabled', 'disabled')
+
+    @property
+    def checked(self) -> bool:
+        """
+        Whether a checkbox or radio button is checked.
+        Wraps the ``checked`` attribute of the HTML element.
+
+        This property is only applicable to checkboxes and radio buttons.
+        """
+        if self.type in ['checkbox', 'radio']:
+            return self.get('checked') is not None
+        else:
+            return False
+
+    @checked.setter
+    def checked(self, is_checked: bool) -> None:
+        if self.type not in ['checkbox', 'radio']:
+            raise UnsupportedFormError('Only checkboxes and radio buttons can be checked')
+
+        if is_checked:
+            self.set('checked', 'checked')
+        else:
+            if self.get('checked') is not None:
+                del self.attrib['checked']
+
+    @property
+    def options(self) -> HtmlOptionCollection:
+        """
+        Options available for a <select> element
+
+        Raises
+        ------
+        UnsupportedFormError
+            If the input is not a <select> element
+        """
+        if self.type != 'select':
+            raise UnsupportedFormError('options is only available for <select> inputs')
+
+        return HtmlOptionCollection(self.iterfind('.//option'))
+
+class HtmlInputCollection(Sequence[HtmlInputElement]):
+    """
+    A list of form input elements
+
+    This is a sequence type (like a list), but you can also access elements by their name
+
+    TODO: Example
+    """
+    def __init__(self, option_els: Iterable[HtmlElement]) -> None:
+        self.__backing_list = [cast(HtmlInputElement, el) for el in option_els]
+
+    # FIXME: key is Union[str,int] -> HtmlInputElement, but mypy doesn't like that
+    def __getitem__(self, key):
+        """
+        Retrieve an option from the option list.
+
+        In addition to slices and integers, you can also pass strings as key,
+        then the option will be found by its value.
+        """
+        if isinstance(key, str):
+            # find option by value
+            for o in self.__backing_list:
+                if o.name == key:
+                    return o
+
+            raise IndexError("No element with name '{0}' found".format(key))
+        else:
+            return self.__backing_list[key]
+
+    def __len__(self) -> int:
+        return len(self.__backing_list)
+
+
+class HtmlFormElement(HtmlElement):
+    """
+    A ``<form>`` element inside a document.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        """
+        Constructs a new :any:`Form` instance.
+
+        .. note::
+
+            Most of the time, you'll want to use :py:obj:`Page.find_form` instead
+
+        """
+
+        super().__init__(*args, **kwargs)
+
+        self.page = None # type: Optional[Page]
+        """
+        The :py:obj:`Page` which contains the form. Might be None.
+        """
+
+    @property
+    def name(self) -> Optional[str]:
+        """
+        Represents the ``name`` attribute on the <form> element, or None if
+        the attribute is not present (read-only)
+        """
+        return self.get('name')
+
+    @property
+    def action(self) -> str:
+        """
+        returns the form target, which is either the ``target`` attribute
+        of the ``<form>`` element, or if the attribute is not present,
+        the url of the containing page (read-only)
+        """
+        action = self.get('action') or ''
+        if self.page is not None:
+            if action == '':
+                # HTML5 spec tells us NOT to use the base url
+                action = self.page.url
+            else:
+                action = urljoin(self.page.base, action)
+
+        return action
+
+    @property
+    def method(self) -> str:
+        """
+        The forms submit method, which is ``GET`` or ``POST``
+        """
+        method = self.get('method') or ''
+        if method.upper() == 'POST':
+            return 'POST'
+        else:
+            return 'GET'
+
+    @property
+    def enctype(self) -> str:
+        """
+        The MIME type for submitted form data.
+
+        Currently, this is hardcoded to ``application/x-www-form-urlencoded``
+        because it is the only supported format.
+
+        In the future, this will look at the ``<form>``'s ``enctype`` attribute,
+        but it will only return supported mime types and return the default
+        value for unsupported mime types.
+        """
+        return 'application/x-www-form-urlencoded'
+
+    @property
+    def accept_charset(self) -> str:
+        """
+        The encoding used to submit the form data
+
+        Can be specified with the ``accept-charset`` attribute, default is the page charset
+        """
+        a = str(self.get('accept-charset') or '')
+        if a != '':
+            try:
+                return codecs.lookup(a).name
+            except LookupError:
+                pass
+
+        if self.page is not None:
+            return self.page.charset
+
+        return 'utf-8' # best guess
+
+    @property
+    def elements(self) -> HtmlInputCollection:
+        """
+        The elements contained in the form
+        """
+        return HtmlInputCollection(x for x in self.iter() if isinstance(x, HtmlInputElement))
+
+    def get_field(self, name: str) -> Optional[str]:
+        """
+        Retrieves the value associated with the given field name.
+
+        * If all input elements with the given name are radio buttons, the value
+          of only checked one is returned (or ``None`` if no radio button is checked).
+        * If the input with the given name is a ``<select>`` element, the value
+          of the selected option is returned (or ``None`` if no option is
+          selected).
+        * For all other elements, the ``value`` attribute is returned..
+        * If no input element with the given name exists, ``None`` is returned.
+
+        Raises
+        ------
+        UnsupportedFormError
+            If there is more than one input element with the same name (and they
+            are not all radio buttons), or if more than one option in a
+            ``<select>`` element is selected, or more than one radio button is checked
+        InputNotFoundError
+            If no input element with the given name exists
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.options` instead.
+        * If your form is particularly crazy, you might have to get your hands dirty
+          and get element attributes yourself.
+
+        """
+        inputs = list(e for e in self.elements if e.name==name)
+        if len(inputs) > 1:
+            # check if they are all radio buttons
+            if any(True for x in inputs if x.type != 'radio'):
+                raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
+                                           "and they are not all radio buttons").format(name))
+
+            # they are radio buttons, find the checked one
+            checked = [x for x in inputs if x.checked]
+            if len(checked) == 1:
+                return checked[0].value
+            elif len(checked) == 0:
+                return None
+            else:
+                raise UnsupportedFormError("Multiple radio buttons with name '{0}' are selected".format(name))
+        elif len(inputs) == 1:
+            return inputs[0].value
+        else:
+            raise InputNotFoundError("No input with name `{0}' exists.".format(name))
+
+    def set_field(self, name: str, value: str) -> None:
+        """
+        Sets the value associated with the given input name
+
+        * If all input elements with the given name are radio buttons,
+          the one with the given value is marked as checked and all other ones
+          will be unchecked.
+        * If the input with the given name is a ``<select>`` element, the option
+          with the given value will be selected, and all other options will be unselected
+        * For all other elements, the ``value`` attribute is changed.
+
+        Raises
+        ------
+
+        UnsupportedFormError
+            * There is more than one input element with the same name (and they
+              are not all radio buttons)
+            * There is no radio button with the given value
+            * There is no option with the given value in a ``<select>`` element.
+            * The input element is a checkbox (if you really want to change the
+              value attribute of a checkbox, use :any:`Input.value`).
+
+        InputNotFoundError
+            if no input element with the given name exists
+
+        Notes
+        -----
+
+        * For ``<select multiple>`` inputs, you might want to use
+          :any:`Form.find_input` and :any:`Input.options` instead.
+        * If your form is particularly crazy, you might have to get your hands dirty
+          and set element attributes yourself.
+
+        """
+        inputs = list(e for e in self.elements if e.name == name)
+        if len(inputs) > 1:
+            # check if they are all radio buttons
+            if any(True for x in inputs if x.type != 'radio'):
+                raise UnsupportedFormError(("Found multiple elements for name '{0}', "+
+                                           "and they are not all radio buttons").format(name))
+
+            # they are radio buttons, find the correct one to check
+            withval = [x for x in inputs if x.get('value') == value]
+            if len(withval) >= 1:
+                for i in inputs:
+                    if i.get('checked') is not None:
+                        del i.attrib['checked']
+
+                withval[0].set('checked', 'checked')
+            else:
+                raise UnsupportedFormError("No radio button with value '{0}' exists".format(value))
+        elif len(inputs) == 1:
+            inputs[0].value = value
+        else:
+            raise InputNotFoundError('No <input> element with name=' + name + ' found.')
+
+    def get_formdata(self) -> Iterator[Tuple[str,str]]:
+        """
+        Calculates form data in key-value pairs
+
+        This is the data that will be sent when the form is submitted
+        """
+        for i in self.elements:
+            if not i.enabled:
+                continue
+
+            if not i.name:
+                continue
+
+            type = i.type
+            if type in ['radio', 'checkbox']:
+                if i.checked:
+                    yield (i.name or '', i.value or 'on')
+            elif type == 'select':
+                for o in i.options:
+                    if o.selected:
+                        yield (i.name or '', o.value or '')
+            else:
+                yield (i.name or '', i.value or '')
+
+    def get_formdata_query(self) -> str:
+        """
+        Get the query string (for submitting via GET)
+        """
+        # TODO: throw if multipart/form-data
+        charset = self.accept_charset
+        return urlencode([(name.encode(charset), val.encode(charset)) for name,val in self.get_formdata()])
+
+    def get_formdata_bytes(self) -> bytes:
+        """
+        The POST data as stream
+        """
+        # TODO: multipart/form-data
+        return self.get_formdata_query().encode('ascii')
+
+    def submit(self) -> 'Page':
+        assert self.page is not None # no chance of working otherwise
+
+        if self.method == 'POST':
+            return self.page.open(self.action, data=self.get_formdata_bytes(),
+                                  additional_headers={'Content-Type': self.enctype})
+        else:
+            return self.page.open(urljoin(self.action, '?'+self.get_formdata_query()))
 
 
 class _TreeBuildingHTMLParser(HTMLParser):
