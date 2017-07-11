@@ -10,7 +10,6 @@ import random
 import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
-import mechanize_mini.HtmlTree as HT
 
 import test_server
 

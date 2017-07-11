@@ -4,8 +4,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
-import mechanize_mini.HtmlTree as HT
-from mechanize_mini.HtmlTree import HTML, HtmlFormElement, HtmlInputElement, UnsupportedFormError, InputNotFoundError
+from mechanize_mini import HTML, HtmlFormElement, HtmlInputElement, UnsupportedFormError, InputNotFoundError
 
 import test_server
 
@@ -164,7 +163,7 @@ class InputTest(unittest.TestCase):
 
 
     def test_id(self):
-        i = HT.HtmlElement('input')
+        i = minimech.HtmlElement('input')
 
         self.assertEqual(i.id, None)
 
@@ -172,11 +171,11 @@ class InputTest(unittest.TestCase):
         self.assertEqual(i.get('id'), 'someid')
         self.assertEqual(i.id, 'someid')
 
-        i = HT.HtmlElement('input', {'id': 'bla'})
+        i = minimech.HtmlElement('input', {'id': 'bla'})
         self.assertEqual(i.id, 'bla')
 
     def test_name(self):
-        i = HT.HtmlElement('input', {})
+        i = minimech.HtmlElement('input', {})
 
         self.assertEqual(i.name, None)
 
@@ -184,17 +183,17 @@ class InputTest(unittest.TestCase):
         self.assertEqual(i.get('name'), 'someid')
         self.assertEqual(i.name, 'someid')
 
-        i = HT.HtmlElement('input', {'name': 'bla'})
+        i = minimech.HtmlElement('input', {'name': 'bla'})
         self.assertEqual(i.name, 'bla')
 
     def test_type(self):
-        i = HT.HtmlElement('select', {})
+        i = minimech.HtmlElement('select', {})
         self.assertEqual(i.type, 'select')
 
-        i = HT.HtmlElement('textarea', {})
+        i = minimech.HtmlElement('textarea', {})
         self.assertEqual(i.type, 'textarea')
 
-        i = HT.HtmlElement('input', {})
+        i = minimech.HtmlElement('input', {})
         self.assertEqual(i.type, 'text')
 
         i = HTML("<input type=radio>")

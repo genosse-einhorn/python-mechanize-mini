@@ -4,11 +4,11 @@ import unittest
 import codecs
 import os.path
 import xml.etree.ElementTree as ET
-import mechanize_mini.HtmlTree as HT
+import mechanize_mini
 
 class XmlEquivTest(unittest.TestCase):
     def assertHtmlEqualsXml(self, html, xml, *, strict_whitespace=True):
-        htree = HT.parsehtmlstr(html)
+        htree = mechanize_mini.parsehtmlstr(html)
         xtree = ET.fromstring(xml)
 
         if not strict_whitespace:
@@ -24,7 +24,7 @@ class XmlEquivTest(unittest.TestCase):
                          ET.tostring(xtree))
 
     def assertHtmlEqualsXmlFragment(self, html, xml, *, strict_whitespace=True):
-        htree = ET.ElementTree(HT.parsefragmentstr(html))
+        htree = ET.ElementTree(mechanize_mini.parsefragmentstr(html))
         xtree = ET.ElementTree(ET.fromstring(xml))
 
         if not strict_whitespace:
@@ -41,14 +41,14 @@ class XmlEquivTest(unittest.TestCase):
 
 class EtreeCompatTest(XmlEquivTest):
     def test_makeelement(self):
-        el = HT.HTML('<bla />')
+        el = mechanize_mini.HTML('<bla />')
         el2 = el.makeelement('blub', {'foo':'bar'})
         self.assertEqual(type(el), type(el2))
         self.assertEqual(el2.tag, 'blub')
         self.assertEqual(el2.get('foo'), 'bar')
 
     def test_clone(self):
-        el = HT.HTML('<bla bar=baz foo=bar><blub>')
+        el = mechanize_mini.HTML('<bla bar=baz foo=bar><blub>')
         el2 = el.copy()
         self.assertEqual(el[0], el2[0])
         self.assertEqual(el.tag, el2.tag)
@@ -56,29 +56,29 @@ class EtreeCompatTest(XmlEquivTest):
         self.assertNotEqual(el, el2)
 
     def test_keys_items(self):
-        el = HT.HTML('<bla bar=baz foo=bar><blub>')
+        el = mechanize_mini.HTML('<bla bar=baz foo=bar><blub>')
         self.assertEqual(el.keys(), {'bar', 'foo'})
         self.assertEqual(set(el.items()), {('bar','baz'), ('foo', 'bar')})
 
     def test_insert(self):
-        el = HT.HTML('<bla><blub>')
-        el.insert(0, HT.HtmlElement('foo'))
+        el = mechanize_mini.HTML('<bla><blub>')
+        el.insert(0, mechanize_mini.HtmlElement('foo'))
         self.assertEqual(ET.tostring(el, encoding='unicode'), '<bla><foo /><blub /></bla>')
 
     def test_getchildren(self):
-        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
         self.assertEqual(el.getchildren(), list(el))
 
     def test_getiterator(self):
-        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
         self.assertEqual(el.getiterator(), list(el.iter()))
 
     def test_findtext(self):
-        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
         self.assertEqual(el.findtext('.//em'), 'hey')
 
     def test_clear(self):
-        el = HT.HTML('<bla><blub/><blub/><p><em>hey</em>')
+        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
         el.clear()
 
         self.assertEqual(len(el), 0)
@@ -88,14 +88,14 @@ class EtreeCompatTest(XmlEquivTest):
         self.assertEqual(el.attrib, {})
 
     def test_bool(self):
-        el = HT.HTML('<bla>')
+        el = mechanize_mini.HTML('<bla>')
         self.assertFalse(el)
 
-        el = HT.HTML('<bla><blub>')
+        el = mechanize_mini.HTML('<bla><blub>')
         self.assertTrue(el)
 
     def test_delitem(self):
-        el = HT.HTML('<bla><foo/><blub/><p><em>hey</em>')
+        el = mechanize_mini.HTML('<bla><foo/><blub/><p><em>hey</em>')
         del el[1]
         self.assertEqual(el.outer_html, '<bla><foo></foo><p><em>hey</em></p></bla>')
 
@@ -377,7 +377,7 @@ class TestCharsetDetection(XmlEquivTest):
         self.assertEqual(codecs.lookup(a).name, codecs.lookup(b).name)
 
     def assertHtmlEqualsXml(self, html, xml, charset=None):
-        htree = HT.parsehtmlbytes(html, charset)
+        htree = mechanize_mini.parsehtmlbytes(html, charset)
         xtree = ET.fromstring(xml)
 
         # prune empty text nodes from xml
@@ -391,50 +391,50 @@ class TestCharsetDetection(XmlEquivTest):
                          ET.tostring(xtree))
 
     def test_default(self):
-        self.assertCodecEqual(HT.detect_charset(b''), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b''), 'cp1252')
 
         # yes, even if utf-8 characters are inside we still default to cp1252
-        self.assertCodecEqual(HT.detect_charset('blabläáßð«»'.encode('utf8')), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset('blabläáßð«»'.encode('utf8')), 'cp1252')
 
     def test_bom(self):
         # various utf trickeries
 
-        self.assertCodecEqual(HT.detect_charset('\uFEFFblöáðäü'.encode('utf-16-le')), 'utf-16-le')
-        self.assertCodecEqual(HT.detect_charset('\uFEFFblöáðäü'.encode('utf-16-be')), 'utf-16-be')
-        self.assertCodecEqual(HT.detect_charset('\uFEFFblöáðäü'.encode('utf8')), 'utf_8')
+        self.assertCodecEqual(mechanize_mini.detect_charset('\uFEFFblöáðäü'.encode('utf-16-le')), 'utf-16-le')
+        self.assertCodecEqual(mechanize_mini.detect_charset('\uFEFFblöáðäü'.encode('utf-16-be')), 'utf-16-be')
+        self.assertCodecEqual(mechanize_mini.detect_charset('\uFEFFblöáðäü'.encode('utf8')), 'utf_8')
 
         # BOM overrides anything else
-        self.assertCodecEqual(HT.detect_charset(codecs.BOM_UTF8 + b'<meta charset="ascii">'), 'utf_8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(codecs.BOM_UTF8 + b'<meta charset="ascii">'), 'utf_8')
 
     def test_meta(self):
 
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset="ascii">'), 'cp1252')
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset="utf8">'), 'utf-8')
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset="ascii">'), 'cp1252')
-        self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv=Content-Type content=text/html; charset=utf8>'), 'utf-8')
-        self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv="Content-Type" content="text/html; CHARSET= utf8">'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset="ascii">'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset="utf8">'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset="ascii">'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta http-equiv=Content-Type content=text/html; charset=utf8>'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta http-equiv="Content-Type" content="text/html; CHARSET= utf8">'), 'utf-8')
 
         # multiple meta tags -> only first valid one is evaluated
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset=ascii>blabla<meta charset="utf-8">'), 'cp1252')
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset=gucklug>blabla<meta charset="utf-8">'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset=ascii>blabla<meta charset="utf-8">'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset=gucklug>blabla<meta charset="utf-8">'), 'utf-8')
 
         # meta content without charset -> cp1252
-        self.assertCodecEqual(HT.detect_charset(b'<meta http-equiv="Content-Type" content="text/html">'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta http-equiv="Content-Type" content="text/html">'), 'cp1252')
 
         # meta in ASCII test with UTF-16 -> gets turned into UTF-8
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset=UTF-16BE>blabla'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset=UTF-16BE>blabla'), 'utf-8')
 
     def test_garbage(self):
         # garbage charset -> default win1252
 
-        self.assertCodecEqual(HT.detect_charset(b'<meta charset="trololololoooool">'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<meta charset="trololololoooool">'), 'cp1252')
 
-        self.assertCodecEqual(HT.detect_charset(b'blabla', 'lutscher'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'blabla', 'lutscher'), 'cp1252')
 
     def test_override(self):
-        self.assertCodecEqual(HT.detect_charset(b'bla', 'utf-8'), 'utf-8')
-        self.assertCodecEqual(HT.detect_charset(b'bla', 'ASCII'), 'cp1252')
-        self.assertCodecEqual(HT.detect_charset(b'bla', 'latin-1'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'bla', 'utf-8'), 'utf-8')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'bla', 'ASCII'), 'cp1252')
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'bla', 'latin-1'), 'cp1252')
 
     def test_html(self):
         # standard case
@@ -448,20 +448,20 @@ class TestCharsetDetection(XmlEquivTest):
 
 class TestConvenience(unittest.TestCase):
     def test_text_content(self):
-        content = HT.parsefragmentstr('bla')
+        content = mechanize_mini.parsefragmentstr('bla')
         self.assertEqual(content.text_content, 'bla')
 
-        el = HT.parsefragmentstr('<p>bla <b><hr>blub    </b>\n<i>hola</p>')
+        el = mechanize_mini.parsefragmentstr('<p>bla <b><hr>blub    </b>\n<i>hola</p>')
         self.assertEqual(el.text_content, 'bla blub hola')
 
 class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
-        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')
+        test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')
 
         self.assertEqual(test.find('form').tag, 'form')
 
     def test_find_by_class(self):
-        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+        test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
         # not existing
         self.assertEqual(test.find(class_name='nada'), None)
@@ -476,12 +476,12 @@ class FindStuffTest(unittest.TestCase):
         self.assertEqual(len(test.findall('.//p', class_name='important')), 2)
 
     def test_find_by_id(self):
-        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+        test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
         self.assertEqual(test.find(id='importantest').get('id'), 'importantest')
 
     def test_find_by_text(self):
-        test = HT.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
+        test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
         self.assertEqual(test.find(text='I am even more importanter').get('class'), 'bar baz important')
 
