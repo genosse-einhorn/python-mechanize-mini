@@ -48,6 +48,9 @@ class HtmlElement(Sequence['HtmlElement']):
         if (tag in ['form']) and not issubclass(cls, HtmlFormElement):
             return HtmlFormElement(*args, **kwargs)
 
+        if (tag in ['a']) and not issubclass(cls, HtmlAnchorElement):
+            return HtmlAnchorElement(*args, **kwargs)
+
         return super().__new__(cls)
 
     def __init__(self, tag: str, attrib: Dict[str,str] = {}, **extra) -> None:
@@ -792,6 +795,41 @@ class HtmlFormElement(HtmlElement):
                                   additional_headers={'Content-Type': self.enctype})
         else:
             return self.page.open(urljoin(self.action, '?'+self.get_formdata_query()))
+
+
+class HtmlAnchorElement(HtmlElement):
+    """
+    An <a> element
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.page = None # type: Page
+        """
+        The :any:`Page` this hyperlink belongs to (if any)
+        """
+
+    @property
+    def href(self) -> str:
+        """
+        the link target as given by the 'href' attribute, or possibly
+        an empty string if the href attribute is missing (read-only)
+        """
+        return self.get('href') or ''
+
+    def follow(self) -> 'Page':
+        """
+        Open the link and return the retrieved target page
+        """
+
+        assert self.page is not None
+
+        return self.page.open(self.href)
+
+    def open(self) -> 'Page':
+        """Alias for :any:`HtmlAnchorElement.follow`"""
+        return self.follow()
 
 
 class _TreeBuildingHTMLParser(HTMLParser):

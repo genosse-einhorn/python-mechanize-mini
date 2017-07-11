@@ -154,31 +154,10 @@ class PageOpenTest(unittest.TestCase):
                       test5.document.text.split('\n'))
 
 class HyperlinkTest(unittest.TestCase):
-    def test_find_link(self):
-        test = browser.open(TEST_SERVER + '/hyperlinks.html')
-
-        first = test.find('.//a')
-        link1 = test.find_link(n=0)
-        self.assertEqual(first, link1)
-
-        link1 = test.find_link(url='/test.html')
-        self.assertEqual(first, link1)
-
-        link1 = test.find_link(text='First Link')
-        self.assertEqual(first, link1)
-
-        # find_link ignores anchors without href
-        second = test.find('.//a', n=2)
-        link2 = test.find_link(n=1)
-        self.assertEqual(second, link2)
-
-        link2 = test.find_link(text='Second One')
-        self.assertEqual(second, link2)
-
     def test_follow_link(self):
         test = browser.open(TEST_SERVER + '/hyperlinks.html')
 
-        page = test.follow_link(text='Second One')
+        page = test.find('.//a', text='Second One').follow()
 
         self.assertEqual(page.uri, TEST_SERVER + '/test.html')
 

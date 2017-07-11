@@ -224,6 +224,10 @@ class Page:
         for f in self.forms:
             f.page = self
 
+        # fixup hyperlink references
+        for a in self.iterfind('.//a'):
+            cast(HT.HtmlAnchorElement, a).page = self
+
     @property
     def baseuri(self) -> str:
         """
@@ -273,54 +277,6 @@ class Page:
     @property
     def forms(self) -> 'HtmlFormsCollection':
         return HtmlFormsCollection(self.document.iterfind('.//form'))
-
-    # TODO: investigate usefulness of link type
-    def find_all_links(self, *, context: HT.HtmlElement = None, id: str = None, class_name: str = None,
-                       url: str = None, text: str = None) -> Iterator[HT.HtmlElement]:
-        """
-        Finds all matching hyperlinks (``<a href=...>``) in the document.
-
-        Search critera are specified as keyword arguments:
-
-        context (:py:obj:`ET.Element`)
-            Return only hyperlinks which are descendants of the given element
-        id (:py:obj:`str`)
-            Return only hyperlinks with the given ``id`` attribute
-        class_name (:py:obj:`str`)
-            Return only hyperlinks with the given css class
-        url (:py:obj:`str`)
-            Return only hyperlinks where the ``href`` attribute equals the given string
-        text (:py:obj:`str` or compiled regex pattern)
-            Return only hyperlinks where the normalized link text (as returned
-            by :any:`mechanize_mini.HtmlTree.text_content`) equals the given string
-        """
-        context = context or self.document
-
-        for i in context.iterfind('.//a', id=id, class_name=class_name, text=text):
-            if i.get('href') is None:
-                continue
-
-            if url is not None and i.get('href') != url:
-                    continue
-
-            yield i
-
-    def find_link(self, *, n: int = None, **kwargs) -> HT.HtmlElement:
-        """
-        Like :any:`find_all_links`, but returns the n-th link found.
-
-        Will raise an exception if n is None and more than one matching link has been found.
-        """
-        return HT._get_exactly_one(self.find_all_links(**kwargs), n)
-
-    def follow_link(self, **kwargs) -> 'Page':
-        """
-        Like :any:`find_link`, but immediately opens the link.
-
-        Returns the new page.
-        """
-        return self.open(self.find_link(**kwargs).get('href') or '')
-
 
     def open(self, url: str, **kwargs) -> 'Page':
         """
