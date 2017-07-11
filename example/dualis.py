@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-import mechanize_mini as minimech
-import mechanize_mini.HtmlTree as HT
-import xml.etree.ElementTree as ET
+from mechanize_mini import Browser
 import sys
 
 def main() -> None:
@@ -11,23 +9,23 @@ def main() -> None:
 
     url = 'https://dualis.dhbw.de/'
 
-    browser = minimech.Browser('DUALIS Grade Scraper / Watcher Bot (jonas@kuemmerlin.eu)')
+    browser = Browser('DUALIS Grade Scraper / Watcher Bot (jonas@kuemmerlin.eu)')
 
     page = browser.open(url)
 
-    form = page.find_form(name='cn_loginForm');
+    form = page.forms['cn_loginForm']
     form.set_field('usrname', user)
     form.set_field('pass', pw);
     page = form.submit()
 
     # check if login succeeded
-    if 'Eingegangene Nachrichten:' not in HT.text_content(page.document.getroot()):
+    if 'Eingegangene Nachrichten:' not in page.document.text_content:
         raise Exception("Login Failed")
 
-    page = page.follow_link(text='Prüfungsergebnisse');
+    page = page.find('.//a', text='Prüfungsergebnisse').follow()
 
-    semesterform = page.find_form(id='semesterchange')
-    semesterbox = semesterform.find_input(type='select')
+    semesterform = page.find(id='semesterchange')
+    semesterbox = semesterform.find('.//select')
 
     for semester in semesterbox.options:
         semesterbox.value = semester.value
@@ -35,28 +33,28 @@ def main() -> None:
         semesterpage = semesterform.submit()
 
         # open exam windows
-        for detaillink in semesterpage.find_all_links(text='Prüfungen'):
-            exampage = semesterpage.open(detaillink.get('href'))
+        for detaillink in semesterpage.findall('.//a', text='Prüfungen'):
+            exampage = detaillink.follow()
 
-            module = HT.text_content(exampage.find_element(tag='h1'))
+            module = exampage.find('.//h1').text_content
 
             # take the first table
-            gradetable = exampage.find_element(tag='table', n=0)
+            gradetable = exampage.find('.//table')
             header1 = ''
             header2 = ''
-            for graderow in HT.find_all_elements(gradetable, tag='tr'):
-                gradecells = list(HT.find_all_elements(graderow, class_name='tbdata'))
-                head1td = next(HT.find_all_elements(graderow, class_name='level01'), None)
-                head2td = next(HT.find_all_elements(graderow, class_name='level02'), None)
+            for graderow in gradetable.iterfind('.//tr'):
+                gradecells = graderow.findall(class_name='tbdata')
+                head1td = graderow.find(class_name='level01')
+                head2td = graderow.find(class_name='level02')
 
-                if head1td:
-                    header1 = HT.text_content(head1td)
-                if head2td:
-                    header2 = HT.text_content(head2td)
+                if head1td is not None:
+                    header1 = head1td.text_content
+                if head2td is not None:
+                    header2 = head2td.text_content
 
                 if len(gradecells):
-                    exam = HT.text_content(gradecells[1])
-                    grade = HT.text_content(gradecells[3])
+                    exam = gradecells[1].text_content
+                    grade = gradecells[3].text_content
 
                     print("{module}\t{header1}\t{header2}\t{exam}\t{grade}\n".format(**locals()))
 
