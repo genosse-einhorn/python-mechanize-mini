@@ -158,8 +158,10 @@ class HyperlinkTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/hyperlinks.html')
 
         page = test.find('.//a', text='Second One').follow()
+        page2 = test.find('.//a').click()
 
         self.assertEqual(page.uri, TEST_SERVER + '/test.html')
+        self.assertEqual(page2.uri, TEST_SERVER + '/test.html')
 
 if __name__ == '__main__':
     TEST_SERVER = test_server.start_test_server()

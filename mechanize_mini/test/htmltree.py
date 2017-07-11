@@ -94,6 +94,11 @@ class EtreeCompatTest(XmlEquivTest):
         el = HT.HTML('<bla><blub>')
         self.assertTrue(el)
 
+    def test_delitem(self):
+        el = HT.HTML('<bla><foo/><blub/><p><em>hey</em>')
+        del el[1]
+        self.assertEqual(el.outer_html, '<bla><foo></foo><p><em>hey</em></p></bla>')
+
 class BasicTest(XmlEquivTest):
     def test_empty(self):
         self.assertHtmlEqualsXml('', '<html />')
@@ -446,7 +451,7 @@ class TestConvenience(unittest.TestCase):
         content = HT.parsefragmentstr('bla')
         self.assertEqual(content.text_content, 'bla')
 
-        el = HT.parsefragmentstr('<p>bla <b>blub    </b>\n<i>hola</p>')
+        el = HT.parsefragmentstr('<p>bla <b><hr>blub    </b>\n<i>hola</p>')
         self.assertEqual(el.text_content, 'bla blub hola')
 
 class FindStuffTest(unittest.TestCase):

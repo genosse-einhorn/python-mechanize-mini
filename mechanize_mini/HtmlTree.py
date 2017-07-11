@@ -242,6 +242,11 @@ class HtmlElement(Sequence['HtmlElement']):
         return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
 
     @property
+    def outer_html(self) -> str:
+        # FIXME: mypy doesn't like duck typing here
+        return ET.tostring(self, method='html', encoding='unicode') # type: ignore
+
+    @property
     def id(self) -> Optional[str]:
         """
         Represents the ``id`` attribute on the element, or None if
@@ -282,25 +287,6 @@ class UnsupportedFormError(Exception):
     * multiple select options are selected where only one is expected
     * multiple radio buttons are selected
     """
-
-class InvalidOptionError(Exception):
-    """
-    Raised if you try to set a value for a <select> element for which there is
-    no <option> element
-
-    .. note::
-
-        If you actually want to set that value, you can create an option element yourself.
-    """
-    def __init__(self, selectEl: HtmlElement, value: str) -> None:
-        super().__init__('Tried to set value to "{0}", but no <option> is available'.format(value))
-
-        self.select = selectEl
-        """ The select element """
-
-        self.value = value
-        """ The value that was supposed to be set """
-
 
 class HtmlOptionElement(HtmlElement):
     """
@@ -582,6 +568,7 @@ class HtmlFormElement(HtmlElement):
         the url of the containing page (read-only)
         """
         action = self.get('action') or ''
+
         if self.page is not None:
             if action == '':
                 # HTML5 spec tells us NOT to use the base url
@@ -827,7 +814,7 @@ class HtmlAnchorElement(HtmlElement):
 
         return self.page.open(self.href)
 
-    def open(self) -> 'Page':
+    def click(self) -> 'Page':
         """Alias for :any:`HtmlAnchorElement.follow`"""
         return self.follow()
 
@@ -1229,29 +1216,3 @@ def HTML(text: str) -> HtmlElement:
     Parses a HTML fragment from a string constant. This function can be used to embed "HTML literals" in Python code
     """
     return parsefragmentstr(text)
-
-
-TElement = TypeVar('TElement')
-def _get_exactly_one(els: Iterator[TElement], n: int = None) -> TElement:
-    # write complicated code here to not traverse the iterator more than necessary
-    try:
-        first = next(els)
-    except StopIteration as e:
-        raise ElementNotFoundError("Expected (at least) one element, got none") from e
-
-    if n is None:
-        try:
-            next(els)
-            raise TooManyElementsFoundError("Expected exactly one element, found a second one")
-        except StopIteration:
-            return first
-    else:
-        retval = first
-        for i in range(1, n+1):
-            try:
-                retval = next(els)
-            except StopIteration as e:
-                raise ElementNotFoundError(
-                    "Tried to retrieve element {n}, but found only {i}".format(n=n, i=i)) from e
-
-        return retval

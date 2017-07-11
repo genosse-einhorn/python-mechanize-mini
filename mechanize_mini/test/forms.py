@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
 import mechanize_mini.HtmlTree as HT
-from mechanize_mini.HtmlTree import HTML, HtmlFormElement, HtmlInputElement, UnsupportedFormError, InvalidOptionError, InputNotFoundError
+from mechanize_mini.HtmlTree import HTML, HtmlFormElement, HtmlInputElement, UnsupportedFormError, InputNotFoundError
 
 import test_server
 
@@ -25,6 +25,10 @@ class FormAccessorTest(unittest.TestCase):
         self.assertEqual(form.method, 'GET')
         self.assertEqual(form.action, page.url)
         self.assertEqual(form.enctype, 'application/x-www-form-urlencoded')
+
+        # form.action has a special default if the form's page is unset
+        form.page = None
+        self.assertEqual(form.action, '')
 
     def test_nondefaults(self):
         page = browser.open(TEST_SERVER + '/form.html')
@@ -76,7 +80,7 @@ class FormAccessorTest(unittest.TestCase):
         page = browser.open(TEST_SERVER + '/form.html')
         form = page.forms[1]
 
-        foo = next(x for x in form.iterfind() if x.get('name') == 'foo')
+        foo = form.elements['foo']
         form.set_field('foo', 'baz')
         self.assertEqual(foo.get('value'), 'baz')
 
@@ -126,6 +130,22 @@ class FormAccessorTest(unittest.TestCase):
         with self.assertRaises(UnsupportedFormError):
             form.set_field('gaga', 'd')
 
+    def test_input_list(self):
+        page = browser.open(TEST_SERVER + '/form.html')
+        form = page.forms[1]
+
+        # name accessor
+        self.assertEqual(form.elements['foo'],
+            next(x for x in form.iter('input') if x.get('name') == 'foo'))
+
+        with self.assertRaises(IndexError):
+            form.elements['i-do-not-exist']
+
+        # int accessor
+        self.assertEqual(form.elements[0], form.find('.//input'))
+
+        # length
+        self.assertEqual(len(form.elements), len([x for x in form.findall() if x.tag in ['input', 'select', 'textarea']]))
 
 class InputTest(unittest.TestCase):
     def test_construct(self):
@@ -355,6 +375,11 @@ class FindFormTest(unittest.TestCase):
         self.assertEqual(formname, formid)
         self.assertEqual(formid, formsecond)
 
+        with self.assertRaises(IndexError):
+            page.forms['alkfmwalkfmawlfawf']
+
+        self.assertEqual(len(page.forms), len(page.findall('.//form')))
+
 class SubmitTest(unittest.TestCase):
     def test_formdata(self):
         form = HTML("""
@@ -414,6 +439,14 @@ class SubmitTest(unittest.TestCase):
         form.page = page
         result = form.submit()
         self.assertEqual(result.document.text, 'name=Müßtérmañ\n')
+
+    def test_encoding_without_page(self):
+        form = HTML("""
+            <form action=show-post-params method=post accept-charset=latin-bogus>
+                <input type=text name=name value='Müßtérmañ'>
+            </form>
+            """)
+        self.assertEqual(form.accept_charset, 'utf-8')
 
     def test_post(self):
         page = browser.open(TEST_SERVER + '/form.html')
