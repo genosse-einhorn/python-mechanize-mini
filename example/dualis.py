@@ -20,7 +20,7 @@ def main() -> None:
 
     # check if login succeeded
     if 'Eingegangene Nachrichten:' not in page.document.text_content:
-        raise Exception("Login Failed")
+        raise Exception("Login Failed, page html="+page.document.outer_html)
 
     page = page.find('.//a', text='Prüfungsergebnisse').follow()
 
