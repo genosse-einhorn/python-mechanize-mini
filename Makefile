@@ -28,3 +28,6 @@ apidocs:
 	@echo "intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}" >> docs/api/conf.py
 	@echo 'html_theme = "sphinx_rtd_theme";' >> docs/api/conf.py
 	@make -C docs/api html
+
+example-dualis.pyz: src/mechanize_mini.py example/dualis.py
+	@PYTHONPATH="$$(pwd -P)/src:$$(pwd -P)/example:$$PYTHONPATH" ./makeappzip.py -o $@ -m dualis dualis mechanize_mini
