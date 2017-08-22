@@ -5,6 +5,7 @@ import codecs
 import os.path
 import xml.etree.ElementTree as ET
 import mechanize_mini
+import warnings
 
 class XmlEquivTest(unittest.TestCase):
     def assertHtmlEqualsXml(self, html, xml, *, strict_whitespace=True):
@@ -42,7 +43,9 @@ class XmlEquivTest(unittest.TestCase):
 class EtreeCompatTest(XmlEquivTest):
     def test_makeelement(self):
         el = mechanize_mini.HTML('<bla />')
-        el2 = el.makeelement('blub', {'foo':'bar'})
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=DeprecationWarning)
+            el2 = el.makeelement('blub', {'foo':'bar'})
         self.assertEqual(type(el), type(el2))
         self.assertEqual(el2.tag, 'blub')
         self.assertEqual(el2.get('foo'), 'bar')
@@ -67,11 +70,15 @@ class EtreeCompatTest(XmlEquivTest):
 
     def test_getchildren(self):
         el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        self.assertEqual(el.getchildren(), list(el))
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=DeprecationWarning)
+            self.assertEqual(el.getchildren(), list(el))
 
     def test_getiterator(self):
         el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        self.assertEqual(el.getiterator(), list(el.iter()))
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=DeprecationWarning)
+            self.assertEqual(el.getiterator(), list(el.iter()))
 
     def test_findtext(self):
         el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
@@ -89,10 +96,14 @@ class EtreeCompatTest(XmlEquivTest):
 
     def test_bool(self):
         el = mechanize_mini.HTML('<bla>')
-        self.assertFalse(el)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=DeprecationWarning)
+            self.assertFalse(el)
 
         el = mechanize_mini.HTML('<bla><blub>')
-        self.assertTrue(el)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=DeprecationWarning)
+            self.assertTrue(el)
 
     def test_delitem(self):
         el = mechanize_mini.HTML('<bla><foo/><blub/><p><em>hey</em>')

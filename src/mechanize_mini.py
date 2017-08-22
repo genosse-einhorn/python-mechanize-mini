@@ -4,6 +4,7 @@ import urllib.error
 from urllib.parse import urljoin, urldefrag, urlencode
 import re
 import codecs
+import warnings
 import xml.etree.ElementTree as ET
 import xml.etree.ElementPath as ElementPath
 from html.parser import HTMLParser
@@ -68,7 +69,8 @@ class HtmlElement(Sequence['HtmlElement']):
         self._children = [] # type: List[HtmlElement]
 
     def makeelement(self: THtmlElement, tag: str, attrib:Dict[str,str]) -> THtmlElement:
-        # Deprecated, just here for compatibility with etree.
+        warnings.warn("HtmlElement#makeelement is deprecated and only there for etree compatibility",
+                      DeprecationWarning, stacklevel=2)
         return self.__class__(tag, attrib)
 
     def copy(self: THtmlElement) -> THtmlElement:
@@ -103,7 +105,9 @@ class HtmlElement(Sequence['HtmlElement']):
         self._children.remove(subelement)
 
     def getchildren(self) -> Sequence['HtmlElement']:
-        # deprecated, just here for etree compat
+        warnings.warn("HtmlElement#getchildren() is deprecated and only here for etree compatibility."
+                      "Use list(el) instead.",
+                      DeprecationWarning, stacklevel=2)
         return self._children
 
     def find(self, path:str='.//', namespaces:Dict[str,str]=None, *,
@@ -192,7 +196,8 @@ class HtmlElement(Sequence['HtmlElement']):
             yield from e.iter(tag)
 
     def getiterator(self, tag:str=None) -> List['HtmlElement']:
-        # deprectated, just for etree compat
+        warnings.warn("HtmlElement#getiterator() is deprecated. Use list(el.iter()) instead.",
+                      DeprecationWarning, stacklevel=2)
         return list(self.iter(tag))
 
     def itertext(self) -> Iterator[str]:
@@ -247,7 +252,9 @@ class HtmlElement(Sequence['HtmlElement']):
         return len(self._children)
 
     def __bool__(self) -> bool:
-        # TODO: Python docs say something about deprecation, keep an eye on that
+        warnings.warn("HtmlElement#__bool__() might not do what you think."
+                      "Check for len(el) or el is None instead.",
+                      DeprecationWarning, stacklevel=2)
         return len(self._children) != 0
 
     def __getitem__(self, index):
