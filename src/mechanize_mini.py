@@ -28,8 +28,14 @@ class HtmlElement(Sequence['HtmlElement']):
         if (tag == 'option') and not issubclass(cls, HtmlOptionElement):
             return HtmlOptionElement(*args, **kwargs)
 
-        if (tag in ['select', 'input', 'textarea']) and not issubclass(cls, HtmlInputElement):
+        if (tag == 'input') and not issubclass(cls, HtmlInputElement):
             return HtmlInputElement(*args, **kwargs)
+
+        if (tag == 'textarea') and not issubclass(cls, HtmlTextareaElement):
+            return HtmlTextareaElement(*args, **kwargs)
+
+        if (tag == 'select') and not issubclass(cls, HtmlSelectElement):
+            return HtmlSelectElement(*args, **kwargs)
 
         if (tag in ['form']) and not issubclass(cls, HtmlFormElement):
             return HtmlFormElement(*args, **kwargs)
@@ -359,7 +365,9 @@ class HtmlOptionCollection(Sequence[HtmlOptionElement]):
 
 class HtmlInputElement(HtmlElement):
     """
-    Wraps an ``<input>``, ``<select>`` or ``<textarea>`` element
+    Wraps an ``<input>`` element.
+
+    Additionally, ``<select>`` and ``<textarea>`` elements are inherited from this class.
     """
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -381,15 +389,10 @@ class HtmlInputElement(HtmlElement):
         This can be ``'select'``, ``'textarea'`` or any of the valid ``type=`` attributes
         for the html ``<input>`` element.
         """
-        if self.tag == 'select':
-            return 'select'
-        elif self.tag == 'textarea':
-            return 'textarea'
-        else:
-            return (self.get('type') or 'text').lower().strip()
+        return (self.get('type') or 'text').lower().strip()
 
     @property
-    def value(self) -> Optional[str]:
+    def value(self) -> str:
         """
         The value associated with the HTML element
 
@@ -406,32 +409,14 @@ class HtmlInputElement(HtmlElement):
         * If you want to select one of multiple radio buttons, look at :any:`Form.set_field`
         * For checkboxes, you usually want to check them and not mess with their values
         """
-        type = self.type
-        if type == 'select':
-            # return first option that is selected
-            selected = [e for e in self.iter('option') if e.get('selected') is not None]
-
-            if len(selected) == 1:
-                return selected[0].get('value', selected[0].text)
-            elif len(selected) == 0:
-                return None
-            else:
-                raise UnsupportedFormError("More than one <option> is selected")
-        elif type == 'textarea':
-            return self.text
-        elif type in ['radio', 'checkbox']:
-            return self.get('value', 'on')
+        if self.type in ['radio', 'checkbox']:
+            return self.get('value') or 'on'
         else:
-            return self.get('value', '')
+            return self.get('value') or ''
 
     @value.setter
     def value(self, val: str) -> None:
-        if self.type == 'select':
-            self.options.set_selected([str(val)])
-        elif self.type == 'textarea':
-            self.text = val
-        else:
-            self.set('value', val)
+        self.set('value', val)
 
     @property
     def enabled(self) -> bool:
@@ -474,19 +459,71 @@ class HtmlInputElement(HtmlElement):
             if self.get('checked') is not None:
                 del self.attrib['checked']
 
+class HtmlTextareaElement(HtmlInputElement):
+    """
+    Wraps a ``<textarea>`` element
+    """
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    @property
+    def type(self) -> str:
+        """
+        The type of the input element (read-only)
+
+        For <textarea> elements, this is always ``'textarea'``
+        """
+        return 'textarea'
+
+    @property
+    def value(self) -> str:
+        return self.text
+
+    @value.setter
+    def value(self, val: str) -> None:
+        self.text = val
+
+class HtmlSelectElement(HtmlInputElement):
+    """
+    Wraps a ``<select>`` element
+    """
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    @property
+    def type(self) -> str:
+        """
+        The type of the input element (read-only)
+
+        For <select> elements, this is always ``'select'``
+        """
+        return 'select'
+
+    @property
+    def value(self) -> str:
+        # return first option that is selected
+        selected = [e for e in self.options if e.selected]
+
+        if len(selected) == 1:
+            return selected[0].get('value') or selected[0].text
+        elif len(selected) == 0:
+            # chrome returns the first option, unless there's no option then returns an empty string
+            if len(self.options) > 0:
+                return self.options[0].value
+            else:
+                return '' # yes, that's whats chrome returns
+        else:
+            raise UnsupportedFormError("More than one <option> is selected")
+
+    @value.setter
+    def value(self, val: str) -> None:
+        self.options.set_selected([str(val)])
+
     @property
     def options(self) -> HtmlOptionCollection:
         """
-        Options available for a <select> element
-
-        Raises
-        ------
-        UnsupportedFormError
-            If the input is not a <select> element
+        Options available for the <select> element
         """
-        if self.type != 'select':
-            raise UnsupportedFormError('options is only available for <select> inputs')
-
         return HtmlOptionCollection(self.iterfind('.//option'))
 
 class HtmlInputCollection(Sequence[HtmlInputElement]):
@@ -744,7 +781,7 @@ class HtmlFormElement(HtmlElement):
             if type in ['radio', 'checkbox']:
                 if i.checked:
                     yield (i.name or '', i.value or 'on')
-            elif type == 'select':
+            elif isinstance(i, HtmlSelectElement):
                 for o in i.options:
                     if o.selected:
                         yield (i.name or '', o.value or '')

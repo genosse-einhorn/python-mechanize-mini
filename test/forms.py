@@ -43,7 +43,7 @@ class FormAccessorTest(unittest.TestCase):
         form = page.forms[1]
 
         self.assertEqual(form.get_field('foo'), 'bar')
-        self.assertEqual(form.get_field('checker'), None)
+        self.assertEqual(form.get_field('checker'), 'theval')
         self.assertEqual(form.get_field('longtext'), 'Loltext')
 
         with self.assertRaises(InputNotFoundError):
@@ -235,8 +235,13 @@ class InputTest(unittest.TestCase):
         i = HTML("<select><option>a<option selected>c</select>")
         self.assertEqual(i.value, 'c')
 
+        # by default: first option selected
         i = HTML("<select><option>a<option>b</select>")
-        self.assertEqual(i.value, None)
+        self.assertEqual(i.value, 'a')
+
+        # unless there are no options: then empty string
+        i = HTML("<select></select>")
+        self.assertEqual(i.value, '')
 
         with self.assertRaises(UnsupportedFormError):
             i = HTML("<select><option selected>a<option selected>b</select>")
@@ -361,7 +366,7 @@ class InputTest(unittest.TestCase):
 
         # raises for non-select elements
         i = HTML('<input>')
-        with self.assertRaises(UnsupportedFormError):
+        with self.assertRaises(AttributeError):
             i.options
 
 class FindFormTest(unittest.TestCase):
