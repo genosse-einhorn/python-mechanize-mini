@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from mechanize_mini import Browser
+from mechanize_mini import *
 import sys
 
 def main() -> None:
@@ -22,10 +22,14 @@ def main() -> None:
     if 'Eingegangene Nachrichten:' not in page.document.text_content:
         raise Exception("Login Failed, page html="+page.document.outer_html)
 
-    page = page.find('.//a', text='Prüfungsergebnisse').follow()
+    resultlink = page.find('.//a', text='Prüfungsergebnisse')
+    assert isinstance(resultlink, HtmlAnchorElement)
+    page = resultlink.follow()
 
     semesterform = page.find(id='semesterchange')
+    assert isinstance(semesterform, HtmlFormElement)
     semesterbox = semesterform.find('.//select')
+    assert isinstance(semesterbox, HtmlSelectElement)
 
     for semester in semesterbox.options:
         semesterbox.value = semester.value
@@ -34,12 +38,16 @@ def main() -> None:
 
         # open exam windows
         for detaillink in semesterpage.findall('.//a', text='Prüfungen'):
+            assert isinstance(detaillink, HtmlAnchorElement)
             exampage = detaillink.follow()
 
-            module = exampage.find('.//h1').text_content
+            moduleheader = exampage.find('.//h1')
+            assert moduleheader is not None
+            module = moduleheader.text_content
 
             # take the first table
             gradetable = exampage.find('.//table')
+            assert gradetable is not None
             header1 = ''
             header2 = ''
             for graderow in gradetable.iterfind('.//tr'):
