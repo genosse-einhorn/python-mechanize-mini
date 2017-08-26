@@ -405,8 +405,8 @@ class HtmlInputElement(HtmlElement):
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.options` instead.
-        * If you want to select one of multiple radio buttons, look at :any:`Form.set_field`
+          :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
+        * If you want to select one of multiple radio buttons, look at :any:`HtmlFormElement.set_field`
         * For checkboxes, you usually want to check them and not mess with their values
         """
         if self.type in ['radio', 'checkbox']:
@@ -566,11 +566,11 @@ class HtmlFormElement(HtmlElement):
 
     def __init__(self, *args, **kwargs) -> None:
         """
-        Constructs a new :any:`Form` instance.
+        Constructs a new :any:`HtmlFormElement` instance.
 
         .. note::
 
-            Most of the time, you'll want to use :py:obj:`Page.find_form` instead
+            You'll want to use :any:`Page.forms` instead
 
         """
 
@@ -578,7 +578,7 @@ class HtmlFormElement(HtmlElement):
 
         self.page = None # type: Optional[Page]
         """
-        The :py:obj:`Page` which contains the form. Might be None.
+        The :any:`Page` which contains the form. Might be None.
         """
 
     @property
@@ -683,7 +683,7 @@ class HtmlFormElement(HtmlElement):
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.options` instead.
+          :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
         * If your form is particularly crazy, you might have to get your hands dirty
           and get element attributes yourself.
 
@@ -728,16 +728,17 @@ class HtmlFormElement(HtmlElement):
             * There is no radio button with the given value
             * There is no option with the given value in a ``<select>`` element.
             * The input element is a checkbox (if you really want to change the
-              value attribute of a checkbox, use :any:`Input.value`).
+              value attribute of a checkbox, use :any:`HtmlInputElement.value`).
 
         InputNotFoundError
             if no input element with the given name exists
+
 
         Notes
         -----
 
         * For ``<select multiple>`` inputs, you might want to use
-          :any:`Form.find_input` and :any:`Input.options` instead.
+          :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
         * If your form is particularly crazy, you might have to get your hands dirty
           and set element attributes yourself.
 
@@ -1459,7 +1460,7 @@ class Page:
 
         self.document = parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: HtmlElement
         """
-        The parsed document (:py:obj:`HT.HtmlElement`)
+        The parsed document (:any:`HtmlElement`)
         """
 
         # fixup form page backreferences
