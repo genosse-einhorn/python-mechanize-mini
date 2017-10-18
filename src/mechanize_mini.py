@@ -47,9 +47,13 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def __init__(self, tag: str, attrib: Dict[str,str] = {}, **extra) -> None:
         """
-        Create a new Element
+        Create a new Element.
 
-        TODO: Document Exceptions for subclasses
+        Note
+        ----
+
+        The :code:`HtmlElement` class overrides :code:`__new__` to create the appropriate
+        element subclass, e.g. when you do :code:`HtmlElement('a')`, you will get a :any:`HtmlAnchorElement`
         """
 
         self.tag = tag # type: str
@@ -61,20 +65,20 @@ class HtmlElement(Sequence['HtmlElement']):
         self.text = '' # type: str
         """
         Element text before the first subelement.
-        This is always a :any:`str`
+        This is always a :any:`str`.
         """
 
         self.tail = '' # type: str
         """
         Text after this element's end tag up until the next sibling tag.
-        This is always a :any:`str`
+        This is always a :any:`str`.
         """
-
 
         self.attrib.update(extra)
         self._children = [] # type: List[HtmlElement]
 
     def makeelement(self: THtmlElement, tag: str, attrib:Dict[str,str]) -> THtmlElement:
+        """ Etree API compatibility. Do not use. """
         warnings.warn("HtmlElement#makeelement is deprecated and only there for etree compatibility",
                       DeprecationWarning, stacklevel=2)
         return self.__class__(tag, attrib)
@@ -82,6 +86,8 @@ class HtmlElement(Sequence['HtmlElement']):
     def copy(self: THtmlElement) -> THtmlElement:
         """
         Make a shallow copy of current element.
+
+        This is not very useful and only implemented for etree compatibility.
         """
         elem = self.__class__(self.tag, self.attrib)
         elem.text = self.text
@@ -92,22 +98,51 @@ class HtmlElement(Sequence['HtmlElement']):
     def append(self, subelement: 'HtmlElement') -> None:
         """
         Add a new child element
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul><li>a<li>b</ul>')
+        >>> el.append(HTML('<li>c'))
+        >>> el.outer_html
+        '<ul><li>a</li><li>b</li><li>c</li></ul>'
+
         """
         self._children.append(subelement)
 
     def extend(self, elements: Iterable['HtmlElement']) -> None:
         """
         Add multiple elements
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul><li>a<li>b</ul>')
+        >>> el.extend([HTML('<li>c'), HTML('<li>d')])
+        >>> el.outer_html
+        '<ul><li>a</li><li>b</li><li>c</li><li>d</li></ul>'
         """
         for element in elements:
             self.append(element)
 
     def insert(self, index: int, subelement: 'HtmlElement') -> None:
-        """Insert a given child at the given position."""
+        """
+        Insert a given child at the given position.
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul><li>a<li>b</ul>')
+        >>> el.insert(1, HTML('<li>c'))
+        >>> el.outer_html
+        '<ul><li>a</li><li>c</li><li>b</li></ul>'
+        """
         self._children.insert(index, subelement)
 
     def remove(self, subelement: 'HtmlElement') -> None:
-        """Remove the given child element"""
+        """
+        Remove the given child element
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul><li>a<li>b<li>c</ul>')
+        >>> el.remove(el[0])
+        >>> el.outer_html
+        '<ul><li>b</li><li>c</li></ul>'
+        """
         self._children.remove(subelement)
 
     def getchildren(self) -> Sequence['HtmlElement']:
@@ -136,6 +171,38 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def findall(self, path:str='.//', namespaces:Dict[str,str]=None, *,
              id:str=None, class_name:str=None, text:str=None) -> List['HtmlElement']:
+        """
+        Retrieves all descendant elements which satisfy all given conditions:
+
+        Parameters
+        ----------
+        path
+            XPath-esque element path. See TODO for the supported functionality.
+        namespaces
+            Accepted for compatibility with etree. The html parser does not use namespaces.
+        id
+            The element id, specified using the :code:`id` attribute in HTML.
+        class_name
+            The class name, specified in the :code:`class` attribute in HTML.
+            TODO: Accept multiple classes
+        text
+            The text contained in the element, as returned by :any:`HtmlElement.text_content`
+
+        Example
+        -------
+        >>> from mechanize_mini import HTML
+        >>> doc = HTML('<ul><li class="a b">With <em>emphasis</em><li id="2">another one<li>third')
+        >>> doc.findall('li') # doctest: +ELLIPSIS
+        [<HtmlElement 'li' at 0x...>, <HtmlElement 'li' at 0x...>, <HtmlElement 'li' at 0x...>]
+        >>> doc.findall('ul')
+        []
+        >>> [el.text_content for el in doc.findall('li', class_name='a')]
+        ['With emphasis']
+        >>> doc.find(id='2').text_content
+        'another one'
+        >>> doc.find(text='third').outer_html
+        '<li>third</li>'
+        """
         return list(self.iterfind(path, namespaces, id=id, class_name=class_name, text=text))
 
     def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, *,
@@ -162,6 +229,11 @@ class HtmlElement(Sequence['HtmlElement']):
         return ElementPath.findtext(self, path, default, namespaces)
 
     def clear(self) -> None:
+        """
+        Removes text, children and attributes from the element.
+
+        Not very useful. Create a new element instead.
+        """
         self.attrib.clear()
         self._children = []
         self.text = ''
@@ -170,6 +242,17 @@ class HtmlElement(Sequence['HtmlElement']):
     def get(self, key: str, default:T=None) -> Union[str,T,None]:
         """
         Get an attribute value.
+
+        Example
+        -------
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<a href=http://example.com>Test</a>')
+        >>> el.get('href')
+        'http://example.com'
+        >>> el.get('data-foo') is None
+        True
+        >>> el.get('data-foo', 'bar')
+        'bar'
         """
         return self.attrib.get(key, default)
 
@@ -192,6 +275,12 @@ class HtmlElement(Sequence['HtmlElement']):
         return self.attrib.items()
 
     def iter(self, tag:str=None) -> Iterator['HtmlElement']:
+        """
+        Returns an iterator over the current element and all its descendants
+        which have the given tag (or any tag, if :code:`tag` is :any:`None`.
+
+        Primarily implemented for etree compatibility, not necessarily useful in itself.
+        """
         if tag == "*":
             tag = None
 
@@ -202,11 +291,24 @@ class HtmlElement(Sequence['HtmlElement']):
             yield from e.iter(tag)
 
     def getiterator(self, tag:str=None) -> List['HtmlElement']:
+        """ Etree compatibility only. Do not use. """
         warnings.warn("HtmlElement#getiterator() is deprecated. Use list(el.iter()) instead.",
                       DeprecationWarning, stacklevel=2)
         return list(self.iter(tag))
 
     def itertext(self) -> Iterator[str]:
+        """
+        Returns an iterator over all texts contained in the element.
+
+        Example
+        -------
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('Hey <b>Ho what\\'s</b> up?')
+        >>> list(el.itertext())
+        ['Hey ', "Ho what's", ' up?']
+
+        """
         if self.text:
             yield self.text
 
@@ -224,8 +326,8 @@ class HtmlElement(Sequence['HtmlElement']):
         Example
         -------
 
-        >>> import mechanize_mini.HtmlTree as HT
-        >>> element = HT.HTML('<p>foo <i>bar    </i>\\nbaz</p>')
+        >>> from mechanize_mini import HTML
+        >>> element = HTML('<p>foo <i>bar    </i>\\nbaz</p>')
         >>> element.text_content
         'foo bar baz'
         """
@@ -239,6 +341,18 @@ class HtmlElement(Sequence['HtmlElement']):
 
     @property
     def outer_html(self) -> str:
+        """
+        Serialize the element to valid HTML code
+
+        Example
+        -------
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul id=foo><li>hey<li>ho')
+        >>> el.outer_html
+        '<ul id="foo"><li>hey</li><li>ho</li></ul>'
+        """
+
         # FIXME: mypy doesn't like duck typing here
         return ET.tostring(self, method='html', encoding='unicode') # type: ignore
 
@@ -246,7 +360,7 @@ class HtmlElement(Sequence['HtmlElement']):
     def id(self) -> Optional[str]:
         """
         Represents the ``id`` attribute on the element, or None if
-        the attribute is not present (read-only)
+        the attribute is not present
         """
         return self.get('id')
 
@@ -295,12 +409,37 @@ class HtmlOptionElement(HtmlElement):
 
     @property
     def value(self) -> str:
-        """ The ``value`` associated with that option (read-only str) """
+        """
+        The ``value`` associated with that option (read-only str)
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<option value=foo>bar</option>')
+        >>> el.value
+        'foo'
+        >>> el = HTML('<option>bar</option>')
+        >>> el.value
+        'bar'
+
+        """
         return self.get('value') or str(self.text)
 
     @property
     def selected(self) -> bool:
-        """ Whether the option is selected (bool, read-write) """
+        """
+        Whether the option is selected (bool, read-write)
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<option selected>bar</option>')
+        >>> el.selected
+        True
+        >>> el = HTML('<option>bar</option>')
+        >>> el.selected
+        False
+        >>> el.selected = True
+        >>> el.outer_html
+        '<option selected="selected">bar</option>'
+
+        """
         return self.get('selected') is not None
 
     @selected.setter
@@ -314,13 +453,27 @@ class HtmlOptionElement(HtmlElement):
     def __str__(self) -> str:
         return self.value
 
+    def __repr__(self) -> str:
+        return '<{} value={!r} at {:#x}>'.format(self.__class__.__name__, self.value, id(self))
+
 class HtmlOptionCollection(Sequence[HtmlOptionElement]):
     """
-    Interface a list of ``<option>`` tags
+    Represents a list of ``<option>`` tags. You get this as :any:`HtmlSelectElement.options`.
 
-    This is a sequence type (like a list), but you can also access options by their values
+    This is a sequence type (like a list), but you can also access options by their values.
 
-    TODO: Example
+    Example
+    -------
+    >>> from mechanize_mini import HTML
+    >>> select = HTML('<select><option value=foo>bar1<option>bar</select>')
+    >>> select.options[0] # doctest: +ELLIPSIS
+    <HtmlOptionElement value='foo' at 0x...>
+    >>> select.options[1] # doctest: +ELLIPSIS
+    <HtmlOptionElement value='bar' at 0x...>
+    >>> select.options['foo'] # doctest: +ELLIPSIS
+    <HtmlOptionElement value='foo' at 0x...>
+    >>> select.options['bar'] == select.options[1]
+    True
     """
     def __init__(self, option_els: Iterable[HtmlElement]) -> None:
         self.__backing_list = [cast(HtmlOptionElement, el) for el in option_els]
@@ -347,11 +500,26 @@ class HtmlOptionCollection(Sequence[HtmlOptionElement]):
         return len(self.__backing_list)
 
     def get_selected(self) -> Sequence[str]:
-        """ Returns a list of selected option values """
+        """
+        Returns a list of selected option values
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<select><option selected>a<option>b<option selected>c')
+        >>> el.options.get_selected()
+        ['a', 'c']
+        """
         return [o.value for o in self if o.selected]
 
     def set_selected(self, values: Iterable[str]) -> None:
-        """ Selects all options with the given values (and unselects everything else) """
+        """
+        Selects all options with the given values (and unselects everything else)
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<select><option selected>a<option>b<option selected>c')
+        >>> el.options.set_selected(['a', 'b'])
+        >>> [o.selected for o in el.options]
+        [True, True, False]
+        """
         avail_values = {o.value for o in self}
         selected_values = set(values)
 
@@ -374,7 +542,7 @@ class HtmlInputElement(HtmlElement):
 
     @property
     def name(self) -> Optional[str]:
-        """ The ``name`` attribute of the HTML element """
+        """ The ``name`` attribute of the HTML element (if present, None otherwise) """
         return self.get('name')
 
     @name.setter
@@ -396,18 +564,19 @@ class HtmlInputElement(HtmlElement):
         """
         The value associated with the HTML element
 
-        * If the input with the given name is a ``<select>`` element, this allows
+        * For a ``<select>`` element, this allows
           you to read the currently selected option or select exactly one of
           the available options.
-        * For all other elements, this represents the ``value`` attribute.
+        * For a ``<textarea>`` element, this is the element's content
+        * For all other elements, this is the ``value`` attribute.
 
         Notes
         -----
 
-        * For ``<select multiple>`` inputs, you might want to use
-          :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
-        * If you want to select one of multiple radio buttons, look at :any:`HtmlFormElement.set_field`
-        * For checkboxes, you usually want to check them and not mess with their values
+        * For ``<select multiple>`` inputs, you might want to use :any:`HtmlSelectElement.options` instead.
+        * If you want to select one of multiple radio buttons, look at :any:`HtmlFormElement.set_field`.
+        * For checkboxes and radio buttons, you usually want to check them (:any:`HtmlInputElement.checked`)
+          and not mess with their values.
         """
         if self.type in ['radio', 'checkbox']:
             return self.get('value') or 'on'
@@ -441,7 +610,8 @@ class HtmlInputElement(HtmlElement):
         Whether a checkbox or radio button is checked.
         Wraps the ``checked`` attribute of the HTML element.
 
-        This property is only applicable to checkboxes and radio buttons.
+        This property is only applicable to checkboxes and radio buttons. For other
+        inputs, this is always false and trying to set it will raise an :any:`UnsupportedFormError`
         """
         if self.type in ['checkbox', 'radio']:
             return self.get('checked') is not None
@@ -522,17 +692,39 @@ class HtmlSelectElement(HtmlInputElement):
     @property
     def options(self) -> HtmlOptionCollection:
         """
-        Options available for the <select> element
+        The ``<option>`` elements contained in this ``<select>`` element (as a :any:`HtmlOptionCollection`)
         """
         return HtmlOptionCollection(self.iterfind('.//option'))
 
 class HtmlInputCollection(Sequence[HtmlInputElement]):
     """
-    A list of form input elements
+    A list of form input elements. You get this from :any:`HtmlFormElement.elements`.
 
     This is a sequence type (like a list), but you can also access elements by their name
 
-    TODO: Example
+    Example
+    -------
+    >>> from mechanize_mini import HTML
+    >>> el = HTML('''
+    ...     <form>
+    ...         <input name=foo value=bar>
+    ...         <textarea name=baz>hohoho</textarea>
+    ...     </form>
+    ... ''')
+    >>> # accessing by index
+    >>> el.elements[0].name
+    'foo'
+    >>> el.elements[1].value
+    'hohoho'
+    >>> # access by name
+    >>> el.elements['foo'].value
+    'bar'
+    >>> # insert new element
+    >>> el.append(HTML('<input name=a>'))
+    >>> el.elements[2].name
+    'a'
+    >>> el.elements['a'] == el.elements[2]
+    True
     """
     def __init__(self, option_els: Iterable[HtmlElement]) -> None:
         self.__backing_list = [cast(HtmlInputElement, el) for el in option_els]
@@ -578,7 +770,9 @@ class HtmlFormElement(HtmlElement):
 
         self.page = None # type: Optional[Page]
         """
-        The :any:`Page` which contains the form. Might be None.
+        The :any:`Page` which contains the form.
+        Might be :any:`None`, if the element was constructed outside of a
+        browser request.
         """
 
     @property
@@ -592,9 +786,11 @@ class HtmlFormElement(HtmlElement):
     @property
     def action(self) -> str:
         """
-        returns the form target, which is either the ``target`` attribute
+        Returns the form target, which is either the ``target`` attribute
         of the ``<form>`` element, or if the attribute is not present,
-        the url of the containing page (read-only)
+        the url of the containing page (read-only).
+
+        If no target could be determined, then the return value is an empty string.
         """
         action = self.get('action') or ''
 
@@ -610,7 +806,10 @@ class HtmlFormElement(HtmlElement):
     @property
     def method(self) -> str:
         """
-        The forms submit method, which is ``GET`` or ``POST``
+        The forms submit method, which is ``GET`` or ``POST``.
+
+        The ``method`` attribute of the ``<form>`` element specifies this,
+        the default if this attribute is missing or malformed is ``GET``.
         """
         method = self.get('method') or ''
         if method.upper() == 'POST':
@@ -654,7 +853,7 @@ class HtmlFormElement(HtmlElement):
     @property
     def elements(self) -> HtmlInputCollection:
         """
-        The elements contained in the form
+        The elements contained in the form as :any:`HtmlInputCollection`.
         """
         return HtmlInputCollection(x for x in self.iter() if isinstance(x, HtmlInputElement))
 
@@ -663,10 +862,9 @@ class HtmlFormElement(HtmlElement):
         Retrieves the value associated with the given field name.
 
         * If all input elements with the given name are radio buttons, the value
-          of only checked one is returned (or ``None`` if no radio button is checked).
+          of the only checked one is returned (or ``None`` if no radio button is checked).
         * If the input with the given name is a ``<select>`` element, the value
-          of the selected option is returned (or ``None`` if no option is
-          selected).
+          of the only selected option is returned (or ``None`` if no option is selected).
         * For all other elements, the ``value`` attribute is returned..
         * If no input element with the given name exists, ``None`` is returned.
 
@@ -684,8 +882,8 @@ class HtmlFormElement(HtmlElement):
 
         * For ``<select multiple>`` inputs, you might want to use
           :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
-        * If your form is particularly crazy, you might have to get your hands dirty
-          and get element attributes yourself.
+        * If your form is particularly crazy, you will have to get your hands dirty
+          and retrieve the element attributes yourself.
 
         """
         inputs = list(e for e in self.elements if e.name==name)
@@ -739,7 +937,7 @@ class HtmlFormElement(HtmlElement):
 
         * For ``<select multiple>`` inputs, you might want to use
           :any:`HtmlFormElement.elements` and :any:`HtmlSelectElement.options` instead.
-        * If your form is particularly crazy, you might have to get your hands dirty
+        * If your form is particularly crazy, you will have to get your hands dirty
           and set element attributes yourself.
 
         """
@@ -767,9 +965,9 @@ class HtmlFormElement(HtmlElement):
 
     def get_formdata(self) -> Iterator[Tuple[str,str]]:
         """
-        Calculates form data in key-value pairs
+        Calculates form data in key-value pairs.
 
-        This is the data that will be sent when the form is submitted
+        This is the data that will be sent when the form is submitted.
         """
         for i in self.elements:
             if not i.enabled:
