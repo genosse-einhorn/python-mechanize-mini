@@ -506,7 +506,7 @@ class SelectorTest(unittest.TestCase):
                 </div>
                 <span class='a b'>test2</span>
             </div>
-            <p>
+            <p id=barp>
                 <span>bar</span>
             </p>
         ''')
@@ -557,6 +557,10 @@ class SelectorTest(unittest.TestCase):
     def test_additional_whitespace(self):
         immed = list(self.f.query_selector_all(".outerdiv> \t  .a "))
         self.assertEqual([e.text for e in immed], ['test2'])
+
+    def test_contains(self):
+        self.assertEqual(self.f.query_selector("p:contains(\"bar\")").id, 'barp')
+        self.assertEqual(self.f.query_selector("span:contains(ba)").text_content, 'bar')
 
     def test_empty(self):
         self.assertEqual(self.f.query_selector(''), None)

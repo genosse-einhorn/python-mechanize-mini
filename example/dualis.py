@@ -22,13 +22,13 @@ def main() -> None:
     if 'Eingegangene Nachrichten:' not in page.document.text_content:
         raise Exception("Login Failed, page html="+page.document.outer_html)
 
-    resultlink = page.find('.//a', text='Prüfungsergebnisse')
+    resultlink = page.query_selector('a:contains(Prüfungsergebnisse)')
     assert isinstance(resultlink, HtmlAnchorElement)
     page = resultlink.follow()
 
-    semesterform = page.find(id='semesterchange')
+    semesterform = page.query_selector('#semesterchange')
     assert isinstance(semesterform, HtmlFormElement)
-    semesterbox = semesterform.find('.//select')
+    semesterbox = semesterform.query_selector('select')
     assert isinstance(semesterbox, HtmlSelectElement)
 
     for semester in semesterbox.options:
@@ -37,23 +37,23 @@ def main() -> None:
         semesterpage = semesterform.submit()
 
         # open exam windows
-        for detaillink in semesterpage.findall('.//a', text='Prüfungen'):
+        for detaillink in semesterpage.query_selector_all('a:contains(Prüfungen)'):
             assert isinstance(detaillink, HtmlAnchorElement)
             exampage = detaillink.follow()
 
-            moduleheader = exampage.find('.//h1')
+            moduleheader = exampage.query_selector('h1')
             assert moduleheader is not None
             module = moduleheader.text_content
 
             # take the first table
-            gradetable = exampage.find('.//table')
+            gradetable = exampage.query_selector('table')
             assert gradetable is not None
             header1 = ''
             header2 = ''
-            for graderow in gradetable.iterfind('.//tr'):
-                gradecells = graderow.findall(class_name='tbdata')
-                head1td = graderow.find(class_name='level01')
-                head2td = graderow.find(class_name='level02')
+            for graderow in gradetable.query_selector_all('tr'):
+                gradecells = list(graderow.query_selector_all('.tbdata'))
+                head1td = graderow.query_selector('.level01')
+                head2td = graderow.query_selector('.level02')
 
                 if head1td is not None:
                     header1 = head1td.text_content

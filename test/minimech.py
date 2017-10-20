@@ -65,7 +65,11 @@ class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = browser.open(TEST_SERVER + '/form.html')
 
+        # using the etree find method
         self.assertEqual(test.find('.//form').tag, 'form')
+
+        # using a css selector
+        self.assertEqual(test.query_selector('form').tag, 'form')
 
     def test_find_by_class(self):
         test = browser.open(TEST_SERVER + '/elements.html')

@@ -415,6 +415,7 @@ class HtmlElement(Sequence['HtmlElement']):
         * universal selector (``*``)
         * descendant combination selector (``div p``)
         * child combination selector (``div > p``)
+        * jQuery text selector (``span:contains(foo)``)
         """
         selector = _build_css_selector(lambda el: el, sel)
         yield from selector(self)
@@ -503,6 +504,8 @@ def _matcher_class(classname: str) -> _TMatcher:
     return lambda el: classname in el.class_list
 def _matcher_id(id: str) -> _TMatcher:
     return lambda el: el.id == id
+def _matcher_contains(text: str) -> _TMatcher:
+    return lambda el: text in el.text_content
 
 def _build_css_selector(start: _TSelector, s: str) -> _TSelector:
     i = 0
@@ -525,6 +528,10 @@ def _build_css_selector(start: _TSelector, s: str) -> _TSelector:
         match = re.match('''#([\w_-]+)''', s[i:])
         if match: # id selector
             matcher = _matcher_and(matcher, _matcher_id(match.group(1)))
+            i += len(match.group(0)); continue
+        match = re.match(''':contains\(("([^"]+)"|([^")]+))\)''', s[i:])
+        if match: # jQuery :contains selector
+            matcher = _matcher_and(matcher, _matcher_contains(str(match.group(2) or match.group(3))))
             i += len(match.group(0)); continue
         match = re.match('''\s*\>\s*''', s[i:])
         if match and matcher: # immediate child
@@ -1843,7 +1850,7 @@ class Page:
         .. note::
 
             This read-only property is calculated from the ``<base>`` tag(s) present
-            in the document. If you change the ``<base>`` tag in the :any:`document`,
+            in the document. If you change the ``<base>`` tag in the :any:`Page.document`,
             you will change this property, too.
         """
 
@@ -1865,12 +1872,28 @@ class Page:
 
     @property
     def uri(self) -> str:
-        """ Alias for :any:`url` (read-only str)"""
+        """ Alias for :any:`Page.url` (read-only str)"""
         return self.url
+
+    def query_selector(self, sel: str) -> Optional[HtmlElement]:
+        """
+        First element matching the selector, or :any:`None`.
+
+        See: :any:`HtmlElement.query_selector`
+        """
+        return next(self.query_selector_all(sel), None)
+
+    def query_selector_all(self, sel: str) -> Iterator[HtmlElement]:
+        """
+        Iterator over all elements matching the given CSS selector.
+
+        See: :any:`HtmlElement.query_selector_all`
+        """
+        selector = _build_css_selector(lambda el: [el], sel)
+        yield from selector(self.document)
 
     def find(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Optional[HtmlElement]:
         return self.document.find(path, namespaces, **kwargs)
-
 
     def findall(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> List[HtmlElement]:
         return self.document.findall(path, namespaces, **kwargs)
