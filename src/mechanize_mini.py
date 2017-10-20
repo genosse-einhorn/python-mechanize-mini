@@ -8,9 +8,10 @@ import warnings
 import xml.etree.ElementTree as ET
 import xml.etree.ElementPath as ElementPath
 from html.parser import HTMLParser
+from functools import partial
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, \
-    IO, Sequence, Iterable, TypeVar, KeysView, ItemsView, cast
+    IO, Sequence, Iterable, TypeVar, KeysView, ItemsView, cast, Callable
 
 THtmlElement = TypeVar('THtmlElement', bound='HtmlElement')
 T = TypeVar('T')
@@ -368,6 +369,65 @@ class HtmlElement(Sequence['HtmlElement']):
     def id(self, id: str) -> None:
         self.set('id', id)
 
+    @property
+    def class_list(self) -> Set[str]:
+        """
+        The set of CSS classes applied to the element. Wraps the ``class``
+        attribute as an immutable set.
+
+        Example
+        -------
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<p class="a c    b">');
+        >>> el.class_list == {'a', 'b', 'c'}
+        True
+        >>> el.class_list = el.class_list | {'d'}
+        >>> el.get('class')
+        'a b c d'
+        >>> el.class_list = el.class_list - set('c')
+        >>> el.get('class')
+        'a b d'
+        >>> 'b' in el.class_list
+        True
+        >>> 'c' in el.class_list
+        False
+        """
+        return set((self.get('class') or '').split())
+
+    @class_list.setter
+    def class_list(self, l: Iterable[str]) -> None:
+        self.set('class', ' '.join(sorted(l)))
+
+    def query_selector_all(self, sel: str) -> Iterator['HtmlElement']:
+        """
+        Returns all descendants matching the given CSS selector.
+        The return value is an iterator that can be used in a for loop,
+        if you want a list you'll need to call :any:`list` on it yourself.
+
+        Note
+        ----
+
+        The following selectors are supported:
+
+        * tag name selector (``div``)
+        * class selector (``.my-class-name``)
+        * id selector (``#my-id``)
+        * universal selector (``*``)
+        * descendant combination selector (``div p``)
+        * child combination selector (``div > p``)
+        """
+        selector = _build_css_selector(lambda el: el, sel)
+        yield from selector(self)
+
+    def query_selector(self, sel: str) -> Optional['HtmlElement']:
+        """
+        Returns the first descendant matching the given CSS selector,
+        or :any:`None` if no matching descendant has been found.
+
+        See :any:`HtmlElement.query_selector_all` for the supported selectors.
+        """
+        return next(self.query_selector_all(sel), None)
+
     def __len__(self) -> int:
         return len(self._children)
 
@@ -385,6 +445,109 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def __delitem__(self, index: int) -> None:
         del self._children[index]
+
+    def __repr__(self) -> str:
+        return '<{} {!r} at {:#x}>'.format(self.__class__.__name__, self.tag, id(self))
+
+### CSS Selectors
+_TMatcher = Callable[[HtmlElement], bool]
+_TSelector = Callable[[HtmlElement], Iterable[HtmlElement]]
+
+def _chain_selector(a: _TSelector, b: _TSelector) -> _TSelector:
+    def wrap(el: HtmlElement) -> Iterator[HtmlElement]:
+        for e in a(el):
+            yield from b(e)
+    return wrap
+
+def _descendant_selector(match: _TMatcher) -> _TSelector:
+    return _chain_selector(lambda el: el, _descendant_or_self_selector(match))
+
+def _descendant_or_self_selector(match: _TMatcher) -> _TSelector:
+    def sel(el: HtmlElement) -> Iterator[HtmlElement]:
+        if match(el):
+            yield el
+
+        for child in el:
+            yield from sel(child)
+    return sel
+
+def _immediate_child_selector(match: _TMatcher) -> _TSelector:
+    def sel(el: HtmlElement) -> Iterator[HtmlElement]:
+        for child in el:
+            if match(child):
+                yield child
+
+    return sel
+
+def _uniqueify_selector(inp: _TSelector) -> _TSelector:
+    def sel(el: HtmlElement) -> Iterator[HtmlElement]:
+        seen = set() # type: Set[int]
+
+        for f in inp(el):
+            if id(f) not in seen:
+                seen |= {id(f)}
+                yield f
+
+    return sel
+
+class InvalidSelectorError(Exception):
+    """ The specified CSS selector is invalid """
+
+def _matcher_and(a: Optional[_TMatcher], b: _TMatcher) -> _TMatcher:
+    if a is not None: return lambda el: cast(_TMatcher, a)(el) and b(el)
+    else: return b
+
+def _matcher_tagname(tag: str) -> _TMatcher:
+    return lambda el: el.tag == tag
+def _matcher_class(classname: str) -> _TMatcher:
+    return lambda el: classname in el.class_list
+def _matcher_id(id: str) -> _TMatcher:
+    return lambda el: el.id == id
+
+def _build_css_selector(start: _TSelector, s: str) -> _TSelector:
+    i = 0
+    selgen = _descendant_or_self_selector
+    sel = start
+    matcher = None # type: Optional[_TMatcher]
+    while i < len(s):
+        match = re.match('''\*''', s[i:])
+        if match: # universal selector
+            matcher = _matcher_and(matcher, lambda el: True)
+            i += len(match.group(0)); continue
+        match = re.match('''[\w_-]+''', s[i:])
+        if match: # tag selector
+            matcher = _matcher_and(matcher, _matcher_tagname(match.group(0)))
+            i += len(match.group(0)); continue
+        match = re.match('''\.([\w_-]+)''', s[i:])
+        if match: # class selector
+            matcher = _matcher_and(matcher, _matcher_class(match.group(1)))
+            i += len(match.group(0)); continue
+        match = re.match('''#([\w_-]+)''', s[i:])
+        if match: # id selector
+            matcher = _matcher_and(matcher, _matcher_id(match.group(1)))
+            i += len(match.group(0)); continue
+        match = re.match('''\s*\>\s*''', s[i:])
+        if match and matcher: # immediate child
+            sel = _chain_selector(sel, selgen(matcher))
+            selgen = _immediate_child_selector
+            matcher = None
+            i += len(match.group(0)); continue
+        match = re.match('''\s+''', s[i:])
+        if match and matcher: # descendant
+            sel = _chain_selector(sel, selgen(matcher))
+            selgen = _descendant_selector
+            matcher = None
+            i += len(match.group(0)); continue;
+
+        raise InvalidSelectorError("Unexpected selector at position {0}".format(i))
+
+    if matcher is not None:
+        sel = _chain_selector(sel, selgen(matcher))
+
+    if sel is not start:
+        return _uniqueify_selector(sel)
+    else: # empty selector - return nothing
+        return lambda el: []
 
 class InputNotFoundError(Exception):
     """

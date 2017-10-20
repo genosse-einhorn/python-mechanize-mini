@@ -496,6 +496,70 @@ class FindStuffTest(unittest.TestCase):
 
         self.assertEqual(test.find(text='I am even more importanter').get('class'), 'bar baz important')
 
+class SelectorTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.f = mechanize_mini.HTML('''
+            <div class='outerdiv' id="outerdiv">
+                <div id="innerdiv">
+                    <span class='a'>test</span>
+                </div>
+                <span class='a b'>test2</span>
+            </div>
+            <p>
+                <span>bar</span>
+            </p>
+        ''')
+
+
+    def test_tags(self):
+        spans = list(self.f.query_selector_all('span'))
+        self.assertEqual(len(spans), 3)
+        self.assertEqual([e.text for e in spans], ['test', 'test2', 'bar'])
+
+    def test_descendant(self):
+        indiv = list(self.f.query_selector_all('div span'))
+        #self.assertEqual(len(indiv), 2)
+        self.assertEqual([e.text for e in indiv], ['test', 'test2'])
+
+        doubldiv = list(self.f.query_selector_all('div div span'))
+        self.assertEqual(len(doubldiv), 1)
+        self.assertEqual(doubldiv[0].text, 'test')
+
+        nope = list(self.f.query_selector_all('html div'))
+        self.assertEqual(len(nope), 0)
+
+    def test_class_id(self):
+        clazz = list(self.f.query_selector_all('.a'))
+        self.assertEqual([e.text for e in clazz], ['test', 'test2'])
+
+        clazz = list(self.f.query_selector_all('#outerdiv.outerdiv div#innerdiv span.a'))
+        self.assertEqual([e.text for e in clazz], ['test'])
+
+        multiclazz = list(self.f.query_selector_all('.a.b'))
+        self.assertEqual([e.text for e in multiclazz], ['test2'])
+
+    def test_child(self):
+        immed = list(self.f.query_selector_all('.outerdiv >.a'))
+        self.assertEqual([e.text for e in immed], ['test2'])
+
+    def test_invalid(self):
+        with self.assertRaises(mechanize_mini.InvalidSelectorError):
+            list(self.f.query_selector_all('a:hover')) # not supported and will never be
+
+    def test_universal_selector(self):
+        sel = list(self.f.query_selector_all('* div'))
+        self.assertEqual([e.id for e in sel], ['innerdiv'])
+
+        sel = list(self.f.query_selector_all('* html')) # this is not IE6
+        self.assertEqual(sel, [])
+
+    def test_additional_whitespace(self):
+        immed = list(self.f.query_selector_all(".outerdiv> \t  .a "))
+        self.assertEqual([e.text for e in immed], ['test2'])
+
+    def test_empty(self):
+        self.assertEqual(self.f.query_selector(''), None)
 
 if __name__ == '__main__':
     unittest.main()
