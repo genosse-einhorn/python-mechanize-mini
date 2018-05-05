@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from functools import partial
 
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, \
-    IO, Sequence, Iterable, TypeVar, KeysView, ItemsView, cast, Callable
+    IO, Sequence, Iterable, TypeVar, KeysView, ItemsView, cast, Callable, overload
 
 THtmlElement = TypeVar('THtmlElement', bound='HtmlElement')
 T = TypeVar('T')
@@ -1205,7 +1205,7 @@ class HtmlAnchorElement(HtmlElement):
 
     def follow(self) -> 'Page':
         """
-        Open the link and return the retrieved target page
+        Open the link and return the retrieved target :any:`Page`.
         """
 
         assert self.page is not None
@@ -1633,10 +1633,10 @@ class HTTPException(Exception):
         super().__init__("HTTP/" + str(code))
 
         self.code = code # type: int
-        """ The HTTP status code """
+        """ The HTTP status code (integer) """
 
         self.page = page # type: Page
-        """ The (parsed) response page """
+        """ The (parsed) response :any:`Page` """
 
 class TooManyRedirectsException(HTTPException):
     """
@@ -1666,9 +1666,6 @@ class Browser:
         ----------
         ua : str
             Value of the :code:`User-Agent` header. This parameter is mandatory.
-            If you want to be honest and upright, you'd include the name of your
-            bot, e.g. ``'MiniMech Documentation Example / rgcjonas@gmail.com'``,
-            but you can also impersonate a real-world browser.
 
         """
 
@@ -1720,8 +1717,11 @@ class Browser:
         Notes
         -----
 
-        *   Anything but a final HTTP/200 response will raise an exception.
-        *   This function supports HTML responses only, and will try to parse anything it gets back as HTML.
+        *   Anything but a final HTTP/200 response will raise an :any:`HTTPException` (which will still
+            contain the parsed :any:`Page` object as :any:`HTTPException.page`).
+        *   Any response will be parsed as HTML, regardless of the given Content-Type.
+            If the response is not actually HTML, this will not fail but the parsed HTML will be mostly garbage
+            (but you can use :any:`Page.response_bytes` to read the raw response).
 
         """
 
@@ -1735,7 +1735,7 @@ class Browser:
             request.add_header(header, val)
 
         try:
-            response = opener.open(request) # type: Union[urllib.request.HTTPResponse, urllib.error.HTTPError, urllib.request.addinfourl]
+            response = opener.open(request) # type: Union[http.client.HTTPResponse, urllib.error.HTTPError, urllib.response.addinfourl]
         except urllib.error.HTTPError as r:
             response = r
 
@@ -1934,7 +1934,14 @@ class HtmlFormsCollection(Sequence[HtmlFormElement]):
     def __init__(self, els: Iterable[HtmlElement]) -> None:
         self.__backing_list = [cast(HtmlFormElement, el) for el in els]
 
-    # FIXME: key is Union[str,int] -> HtmlFormElement, but mypy doesn't like that
+    @overload
+    def __getitem__(self, index: Union[int,str]) -> HtmlFormElement:
+        pass # pragma: no cover
+
+    @overload
+    def __getitem__(self, s: slice) -> Sequence[HtmlFormElement]:
+        pass  # pragma: no cover
+
     def __getitem__(self, key):
         """
         Retrieve an option from the option list.
