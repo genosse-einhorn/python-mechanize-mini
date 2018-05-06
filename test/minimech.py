@@ -7,7 +7,6 @@ import urllib.parse, urllib.request, urllib.error
 import multiprocessing
 import time
 import random
-import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
 
@@ -22,24 +21,24 @@ class BasicTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/test.html')
         self.assertEqual(test.url, TEST_SERVER + '/test.html')
         self.assertEqual(test.uri, TEST_SERVER + '/test.html')
-        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(test.document.text_content, 'Bla bla bla')
 
     def test_redirect_3xx(self):
         test = browser.open(TEST_SERVER + '/redirect?test.html')
-        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(test.document.text_content, 'Bla bla bla')
 
     def test_redirect_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh?test.html')
-        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(test.document.text_content, 'Bla bla bla')
 
     def test_redirect_broken_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect-refresh-broken')
-        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(),
+        self.assertEqual(test.document.text_content,
             'Not Redirected')
 
     def test_redirect_meta_refresh(self):
         test = browser.open(TEST_SERVER + '/redirect?/redirect-meta.html')
-        self.assertEqual(ET.tostring(test.document, method='text', encoding='unicode').strip(), 'Bla bla bla')
+        self.assertEqual(test.document.text_content, 'Bla bla bla')
 
     def test_too_many_redirects(self):
         with self.assertRaises(minimech.TooManyRedirectsException):
@@ -60,36 +59,6 @@ class BasicTest(unittest.TestCase):
         test = browser.open(TEST_SERVER + '/return-x-headers?bla=foo&BAR=baZ')
         self.assertEqual(test.headers['X-Bla'], 'foo')
         self.assertEqual(test.headers['x-bar'], 'baZ')
-
-class FindStuffTest(unittest.TestCase):
-    def test_find_by_tag_name(self):
-        test = browser.open(TEST_SERVER + '/form.html')
-
-        # using the etree find method
-        self.assertEqual(test.find('.//form').tag, 'form')
-
-        # using a css selector
-        self.assertEqual(test.query_selector('form').tag, 'form')
-
-    def test_find_by_class(self):
-        test = browser.open(TEST_SERVER + '/elements.html')
-
-        # not existing
-        self.assertEqual(test.find(class_name='nada'), None)
-
-        # not so many
-        self.assertEqual(test.find(class_name='important', n=10), None)
-
-        # but the third one is ok
-        self.assertNotEqual(test.find(class_name='important', n=2), None)
-
-        # but there should be two of these
-        self.assertEqual(len(test.findall('.//p', class_name='important')), 2)
-
-    def test_find_by_id(self):
-        test = browser.open(TEST_SERVER + '/elements.html')
-
-        self.assertEqual(test.find(id='importantest').get('id'), 'importantest')
 
 class BaseUriTest(unittest.TestCase):
     def test_implicit(self):
@@ -160,8 +129,8 @@ class HyperlinkTest(unittest.TestCase):
     def test_follow_link(self):
         test = browser.open(TEST_SERVER + '/hyperlinks.html')
 
-        page = test.find('.//a', text='Second One').follow()
-        page2 = test.find('.//a').click()
+        page = test.query_selector('a:contains(Second One)').follow()
+        page2 = test.query_selector('a').click()
 
         self.assertEqual(page.uri, TEST_SERVER + '/test.html')
         self.assertEqual(page2.uri, TEST_SERVER + '/test.html')

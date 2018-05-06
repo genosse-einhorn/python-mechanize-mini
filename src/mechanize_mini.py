@@ -5,8 +5,7 @@ from urllib.parse import urljoin, urldefrag, urlencode
 import re
 import codecs
 import warnings
-import xml.etree.ElementTree as ET
-import xml.etree.ElementPath as ElementPath
+import html
 from html.parser import HTMLParser
 from functools import partial
 
@@ -18,9 +17,6 @@ T = TypeVar('T')
 class HtmlElement(Sequence['HtmlElement']):
     """
     An HTML Element
-
-    This is designed to be duck-compatible with :any:`xml.etree.ElementTree.Element`,
-    but is extended with new additional methods
     """
 
     def __new__(cls, *args, **kwargs) -> 'HtmlElement':
@@ -78,24 +74,6 @@ class HtmlElement(Sequence['HtmlElement']):
         self.attrib.update(extra)
         self._children = [] # type: List[HtmlElement]
 
-    def makeelement(self: THtmlElement, tag: str, attrib:Dict[str,str]) -> THtmlElement:
-        """ Etree API compatibility. Do not use. """
-        warnings.warn("HtmlElement#makeelement is deprecated and only there for etree compatibility",
-                      DeprecationWarning, stacklevel=2)
-        return self.__class__(tag, attrib)
-
-    def copy(self: THtmlElement) -> THtmlElement:
-        """
-        Make a shallow copy of current element.
-
-        This is not very useful and only implemented for etree compatibility.
-        """
-        elem = self.__class__(self.tag, self.attrib)
-        elem.text = self.text
-        elem.tail = self.tail
-        elem[:] = self
-        return elem
-
     def append(self, subelement: 'HtmlElement') -> None:
         """
         Add a new child element
@@ -146,100 +124,6 @@ class HtmlElement(Sequence['HtmlElement']):
         """
         self._children.remove(subelement)
 
-    def getchildren(self) -> Sequence['HtmlElement']:
-        warnings.warn("HtmlElement#getchildren() is deprecated and only here for etree compatibility."
-                      "Use list(el) instead.",
-                      DeprecationWarning, stacklevel=2)
-        return self._children
-
-    def find(self, path:str='.//', namespaces:Dict[str,str]=None, *,
-             id:str=None, class_name:str=None, text:str=None, n:int=0) -> Optional['HtmlElement']:
-        """
-        Find first element matching the given conditions.
-
-        See: findall
-        """
-        els = self.iterfind(path, namespaces, id=id, class_name=class_name, text=text)
-        retval = next(els, None)
-        for i in range(1, n+1):
-            try:
-                retval = next(els)
-            except StopIteration as e:
-                return None
-
-        return retval
-
-
-    def findall(self, path:str='.//', namespaces:Dict[str,str]=None, *,
-             id:str=None, class_name:str=None, text:str=None) -> List['HtmlElement']:
-        """
-        Retrieves all descendant elements which satisfy all given conditions:
-
-        Parameters
-        ----------
-        path
-            XPath-esque element path. See TODO for the supported functionality.
-        namespaces
-            Accepted for compatibility with etree. The html parser does not use namespaces.
-        id
-            The element id, specified using the :code:`id` attribute in HTML.
-        class_name
-            The class name, specified in the :code:`class` attribute in HTML.
-            TODO: Accept multiple classes
-        text
-            The text contained in the element, as returned by :any:`HtmlElement.text_content`
-
-        Example
-        -------
-        >>> from mechanize_mini import HTML
-        >>> doc = HTML('<ul><li class="a b">With <em>emphasis</em><li id="2">another one<li>third')
-        >>> doc.findall('li') # doctest: +ELLIPSIS
-        [<HtmlElement 'li' at 0x...>, <HtmlElement 'li' at 0x...>, <HtmlElement 'li' at 0x...>]
-        >>> doc.findall('ul')
-        []
-        >>> [el.text_content for el in doc.findall('li', class_name='a')]
-        ['With emphasis']
-        >>> doc.find(id='2').text_content
-        'another one'
-        >>> doc.find(text='third').outer_html
-        '<li>third</li>'
-        """
-        return list(self.iterfind(path, namespaces, id=id, class_name=class_name, text=text))
-
-    def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, *,
-                 id:str=None, class_name:str=None, text:str=None) -> Iterator['HtmlElement']:
-        # FIXME: fighting against the type checker
-        for eltmp in ElementPath.iterfind(self, path, namespaces): # type: ignore
-            el = cast(HtmlElement, eltmp)
-
-            if id is not None:
-                if el.get('id') != id:
-                    continue
-
-            if class_name is not None:
-                if class_name not in (el.get('class') or '').split():
-                    continue
-
-            if text is not None:
-                if el.text_content != text:
-                    continue
-
-            yield el
-
-    def findtext(self, path, default=None, namespaces=None):
-        return ElementPath.findtext(self, path, default, namespaces)
-
-    def clear(self) -> None:
-        """
-        Removes text, children and attributes from the element.
-
-        Not very useful. Create a new element instead.
-        """
-        self.attrib.clear()
-        self._children = []
-        self.text = ''
-        self.tail = ''
-
     def get(self, key: str, default:T=None) -> Union[str,T,None]:
         """
         Get an attribute value.
@@ -266,6 +150,13 @@ class HtmlElement(Sequence['HtmlElement']):
     def keys(self) -> KeysView[str]:
         """
         List of attribute names
+
+        Example
+        -------
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<a href=http://example.com name=blub>Test</a>')
+        >>> list(el.keys())
+        ['href', 'name']
         """
         return self.attrib.keys()
 
@@ -279,23 +170,12 @@ class HtmlElement(Sequence['HtmlElement']):
         """
         Returns an iterator over the current element and all its descendants
         which have the given tag (or any tag, if :code:`tag` is :any:`None`.
-
-        Primarily implemented for etree compatibility, not necessarily useful in itself.
         """
-        if tag == "*":
-            tag = None
-
         if tag is None or self.tag == tag:
             yield self
 
         for e in self._children:
             yield from e.iter(tag)
-
-    def getiterator(self, tag:str=None) -> List['HtmlElement']:
-        """ Etree compatibility only. Do not use. """
-        warnings.warn("HtmlElement#getiterator() is deprecated. Use list(el.iter()) instead.",
-                      DeprecationWarning, stacklevel=2)
-        return list(self.iter(tag))
 
     def itertext(self) -> Iterator[str]:
         """
@@ -334,11 +214,34 @@ class HtmlElement(Sequence['HtmlElement']):
         """
 
         # let python walk the tree and get the text for us
-        c = ET.tostring(self, method='text', encoding='unicode') # type: ignore
+        l = [] # type: List[str]
 
-        # now whitespace-normalize.
-        # FIXME: is ascii enough or should we dig into unicode whitespace here?
-        return ' '.join(x for x in re.split('[ \t\r\n\f]+', c) if x != '')
+        for t in self.itertext():
+            # FIXME: is ascii enough or should we dig into unicode whitespace here?
+            l.extend(x for x in re.split('[ \t\r\n\f]+', t) if x != '')
+
+        return ' '.join(l)
+
+    @property
+    def inner_html(self) -> str:
+        """
+        Serialize the elements content to valid HTML code
+
+        Example
+        -------
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul id=foo><li>hey<li>ho')
+        >>> el.inner_html
+        '<li>hey</li><li>ho</li>'
+        """
+        l = [html.escape(self.text, quote=False)] # type: List[str]
+
+        for child in self:
+            l.append(child.outer_html)
+            l.append(html.escape(child.tail, quote=False))
+
+        return ''.join(l)
 
     @property
     def outer_html(self) -> str:
@@ -349,13 +252,88 @@ class HtmlElement(Sequence['HtmlElement']):
         -------
 
         >>> from mechanize_mini import HTML
-        >>> el = HTML('<ul id=foo><li>hey<li>ho')
+        >>> el = HTML('<ul id=foo><li>hey<br><li>ho')
         >>> el.outer_html
-        '<ul id="foo"><li>hey</li><li>ho</li></ul>'
+        '<ul id="foo"><li>hey<br></li><li>ho</li></ul>'
         """
 
-        # FIXME: mypy doesn't like duck typing here
-        return ET.tostring(self, method='html', encoding='unicode') # type: ignore
+        l = [ '<', html.escape(self.tag) ] # type: List[str]
+
+        for k, v in sorted(self.items()):
+            l.append(' ')
+            l.append(html.escape(k))
+            l.append('="')
+            l.append(html.escape(v))
+            l.append('"')
+
+        l.append('>')
+
+        i = self.inner_html
+        if len(i) > 0 or self.tag not in ["area", "br", "embed", "img", "keygen", "wbr",
+                    "input", "param", "source", "track", "hr", "image", "base",
+                    "basefont", "bgsound", "link", "meta", "col", "frame", "menuitem"]:
+            l.append(i)
+            l.append('</')
+            l.append(html.escape(self.tag))
+            l.append('>')
+
+        return ''.join(l)
+
+    @property
+    def inner_xml(self) -> str:
+        """
+        Serialize the elements content to valid XHTML code
+
+        Example
+        -------
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul id=foo><li>hey<li>ho')
+        >>> el.inner_xml
+        '<li>hey</li><li>ho</li>'
+        """
+        l = [html.escape(self.text, quote=False)] # type: List[str]
+
+        for child in self:
+            l.append(child.outer_xml)
+            l.append(html.escape(child.tail, quote=False))
+
+        return ''.join(l)
+
+    @property
+    def outer_xml(self) -> str:
+        """
+        Serialize the element to valid XHTML code
+
+        Example
+        -------
+
+        >>> from mechanize_mini import HTML
+        >>> el = HTML('<ul id=foo><li>hey<br><li>ho')
+        >>> el.outer_xml
+        '<ul id="foo"><li>hey<br /></li><li>ho</li></ul>'
+        """
+
+        l = [ '<', html.escape(self.tag) ] # type: List[str]
+
+        for k, v in sorted(self.items()):
+            l.append(' ')
+            l.append(html.escape(k))
+            l.append('="')
+            l.append(html.escape(v))
+            l.append('"')
+
+        i = self.inner_xml
+        if len(i):
+            l.append('>')
+            l.append(i)
+            l.append('</')
+            l.append(html.escape(self.tag))
+            l.append('>')
+        else:
+            l.append(' />')
+
+        return ''.join(l)
 
     @property
     def id(self) -> Optional[str]:
@@ -431,12 +409,6 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def __len__(self) -> int:
         return len(self._children)
-
-    def __bool__(self) -> bool:
-        warnings.warn("HtmlElement#__bool__() might not do what you think."
-                      "Check for len(el) or el is None instead.",
-                      DeprecationWarning, stacklevel=2)
-        return len(self._children) != 0
 
     def __getitem__(self, index):
         return self._children[index]
@@ -864,7 +836,7 @@ class HtmlSelectElement(HtmlInputElement):
         """
         The ``<option>`` elements contained in this ``<select>`` element (as a :any:`HtmlOptionCollection`)
         """
-        return HtmlOptionCollection(self.iterfind('.//option'))
+        return HtmlOptionCollection(self.query_selector_all('option'))
 
 class HtmlInputCollection(Sequence[HtmlInputElement]):
     """
@@ -1836,7 +1808,7 @@ class Page:
             f.page = self
 
         # fixup hyperlink references
-        for a in self.iterfind('.//a'):
+        for a in self.query_selector_all('a'):
             cast(HtmlAnchorElement, a).page = self
 
     @property
@@ -1859,7 +1831,7 @@ class Page:
         # NOTE: at the moment, the html parser cannot fail and will
         # always return something. This is just defensive programming here
         if not (self.document is None): # pragma: no branch
-            bases = self.document.findall('.//base[@href]')
+            bases = [x for x in self.document.query_selector_all('base') if x.get('href') is not None]
             if len(bases) > 0:
                 base = urljoin(self.url, (bases[0].get('href') or '').strip())
 
@@ -1892,18 +1864,9 @@ class Page:
         selector = _build_css_selector(lambda el: [el], sel)
         yield from selector(self.document)
 
-    def find(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Optional[HtmlElement]:
-        return self.document.find(path, namespaces, **kwargs)
-
-    def findall(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> List[HtmlElement]:
-        return self.document.findall(path, namespaces, **kwargs)
-
-    def iterfind(self, path:str='.//', namespaces:Dict[str,str]=None, **kwargs) -> Iterator[HtmlElement]:
-        return self.document.iterfind(path, namespaces, **kwargs)
-
     @property
     def forms(self) -> 'HtmlFormsCollection':
-        return HtmlFormsCollection(self.document.iterfind('.//form'))
+        return HtmlFormsCollection(self.document.query_selector_all('form'))
 
     def open(self, url: str, **kwargs) -> 'Page':
         """

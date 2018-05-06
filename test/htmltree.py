@@ -21,11 +21,11 @@ class XmlEquivTest(unittest.TestCase):
                 el.text = str(el.text or '').strip()
                 el.tail = str(el.tail or '').strip()
 
-        self.assertEqual(ET.tostring(htree),
-                         ET.tostring(xtree))
+        self.assertEqual(htree.outer_xml,
+                         ET.tostring(xtree, encoding='unicode'))
 
     def assertHtmlEqualsXmlFragment(self, html, xml, *, strict_whitespace=True):
-        htree = ET.ElementTree(mechanize_mini.parsefragmentstr(html))
+        htree = mechanize_mini.parsefragmentstr(html)
         xtree = ET.ElementTree(ET.fromstring(xml))
 
         if not strict_whitespace:
@@ -37,78 +37,8 @@ class XmlEquivTest(unittest.TestCase):
                 el.text = str(el.text or '').strip()
                 el.tail = str(el.tail or '').strip()
 
-        self.assertEqual(ET.tostring(htree.getroot()),
-                         ET.tostring(xtree.getroot()))
-
-class EtreeCompatTest(XmlEquivTest):
-    def test_makeelement(self):
-        el = mechanize_mini.HTML('<bla />')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",category=DeprecationWarning)
-            el2 = el.makeelement('blub', {'foo':'bar'})
-        self.assertEqual(type(el), type(el2))
-        self.assertEqual(el2.tag, 'blub')
-        self.assertEqual(el2.get('foo'), 'bar')
-
-    def test_clone(self):
-        el = mechanize_mini.HTML('<bla bar=baz foo=bar><blub>')
-        el2 = el.copy()
-        self.assertEqual(el[0], el2[0])
-        self.assertEqual(el.tag, el2.tag)
-        self.assertEqual(el.attrib, el2.attrib)
-        self.assertNotEqual(el, el2)
-
-    def test_keys_items(self):
-        el = mechanize_mini.HTML('<bla bar=baz foo=bar><blub>')
-        self.assertEqual(el.keys(), {'bar', 'foo'})
-        self.assertEqual(set(el.items()), {('bar','baz'), ('foo', 'bar')})
-
-    def test_insert(self):
-        el = mechanize_mini.HTML('<bla><blub>')
-        el.insert(0, mechanize_mini.HtmlElement('foo'))
-        self.assertEqual(ET.tostring(el, encoding='unicode'), '<bla><foo /><blub /></bla>')
-
-    def test_getchildren(self):
-        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",category=DeprecationWarning)
-            self.assertEqual(el.getchildren(), list(el))
-
-    def test_getiterator(self):
-        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",category=DeprecationWarning)
-            self.assertEqual(el.getiterator(), list(el.iter()))
-
-    def test_findtext(self):
-        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        self.assertEqual(el.findtext('.//em'), 'hey')
-
-    def test_clear(self):
-        el = mechanize_mini.HTML('<bla><blub/><blub/><p><em>hey</em>')
-        el.clear()
-
-        self.assertEqual(len(el), 0)
-        self.assertEqual(el.tag, 'bla')
-        self.assertEqual(el.tail, '')
-        self.assertEqual(el.text, '')
-        self.assertEqual(el.attrib, {})
-
-    def test_bool(self):
-        el = mechanize_mini.HTML('<bla>')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",category=DeprecationWarning)
-            self.assertFalse(el)
-
-        el = mechanize_mini.HTML('<bla><blub>')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",category=DeprecationWarning)
-            self.assertTrue(el)
-
-    def test_delitem(self):
-        el = mechanize_mini.HTML('<bla><foo/><blub/><p><em>hey</em>')
-        del el[1]
-        self.assertEqual(el.outer_html, '<bla><foo></foo><p><em>hey</em></p></bla>')
+        self.assertEqual(htree.outer_xml,
+                         ET.tostring(xtree.getroot(), encoding='unicode'))
 
 class BasicTest(XmlEquivTest):
     def test_empty(self):
@@ -362,6 +292,22 @@ class ParagraphWeirdness(XmlEquivTest):
                     <p/>
                     Blub\n                \n            \n            </html>''')
 
+
+    def test_sequence_methods(self):
+        content = mechanize_mini.parsefragmentstr('<ul><li>a<li>b<li>c')
+        self.assertEqual(content.outer_html, '<ul><li>a</li><li>b</li><li>c</li></ul>')
+
+        content[0] = mechanize_mini.parsefragmentstr('<li>d')
+        self.assertEqual(content.outer_html, '<ul><li>d</li><li>b</li><li>c</li></ul>')
+
+        del content[2]
+        self.assertEqual(content.outer_html, '<ul><li>d</li><li>b</li></ul>')
+
+    def test_repr(self):
+        content = mechanize_mini.parsefragmentstr('<ul><li>a<li>b<li>c')
+
+        self.assertEqual(repr(content), '<HtmlElement \'ul\' at {:#x}>'.format(id(content)))
+
 class TestFormatMisnesting(XmlEquivTest):
     def test_correct(self):
         self.assertHtmlEqualsXml('<b>a<div>b</div>c</b>', '<html><b>a<div>b</div>c</b></html>')
@@ -398,8 +344,8 @@ class TestCharsetDetection(XmlEquivTest):
             if str(el.tail).strip() == '':
                 el.tail = None
 
-        self.assertEqual(ET.tostring(htree),
-                         ET.tostring(xtree))
+        self.assertEqual(htree.outer_xml,
+                         ET.tostring(xtree, encoding='unicode'))
 
     def test_default(self):
         self.assertCodecEqual(mechanize_mini.detect_charset(b''), 'cp1252')
@@ -469,32 +415,28 @@ class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')
 
-        self.assertEqual(test.find('form').tag, 'form')
+        self.assertEqual(test.query_selector('form').tag, 'form')
 
     def test_find_by_class(self):
         test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
         # not existing
-        self.assertEqual(test.find(class_name='nada'), None)
-
-        # not so many
-        self.assertEqual(test.find(class_name='important', n=10), None)
-
-        # but the third one is ok
-        self.assertNotEqual(test.find(class_name='important', n=2), None)
+        self.assertEqual(test.query_selector('.nada'), None)
 
         # but there should be two of these
-        self.assertEqual(len(test.findall('.//p', class_name='important')), 2)
+        self.assertEqual(len(list(test.query_selector_all('p.important'))), 2)
 
     def test_find_by_id(self):
         test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
-        self.assertEqual(test.find(id='importantest').get('id'), 'importantest')
+        self.assertEqual(test.query_selector('#importantest').get('id'), 'importantest')
 
     def test_find_by_text(self):
         test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/elements.html')
 
-        self.assertEqual(test.find(text='I am even more importanter').get('class'), 'bar baz important')
+        self.assertEqual(test.query_selector('.bar.baz.important').text_content, 'I am even more importanter')
+
+        self.assertEqual(test.query_selector('p:contains(I am even more importanter)').get('class'), 'bar baz important')
 
 class SelectorTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

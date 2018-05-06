@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import unittest
-import xml.etree.ElementTree as ET
 
 import mechanize_mini as minimech
 from mechanize_mini import HTML, HtmlFormElement, HtmlInputElement, UnsupportedFormError, InputNotFoundError
@@ -88,12 +87,12 @@ class FormAccessorTest(unittest.TestCase):
         # set option with text
         form.set_field('checker', 'Text is Value')
         self.assertEqual(form.get_field('checker'), 'Text is Value')
-        self.assertEqual(page.find('.//option', text='Text is Value').get('selected'), 'selected')
+        self.assertEqual(page.query_selector('option:contains(Text is Value)').get('selected'), 'selected')
 
         # set option with custom value
         form.set_field('checker', 'theval')
         self.assertEqual(form.get_field('checker'), 'theval')
-        self.assertEqual(page.find(id='val1').get('selected'), 'selected')
+        self.assertEqual(page.query_selector('#val1').get('selected'), 'selected')
 
         # set nonexistent option
         with self.assertRaises(UnsupportedFormError):
@@ -104,7 +103,7 @@ class FormAccessorTest(unittest.TestCase):
             form.set_field('nonexistent', 'bla')
 
         # textarea
-        txa = form.find('.//textarea')
+        txa = form.query_selector('textarea')
         form.set_field('longtext', 'blabla')
         self.assertEqual(txa.text, 'blabla')
 
@@ -141,10 +140,10 @@ class FormAccessorTest(unittest.TestCase):
             form.elements['i-do-not-exist']
 
         # int accessor
-        self.assertEqual(form.elements[0], form.find('.//input'))
+        self.assertEqual(form.elements[0], form.query_selector('input'))
 
         # length
-        self.assertEqual(len(form.elements), len([x for x in form.findall() if x.tag in ['input', 'select', 'textarea']]))
+        self.assertEqual(len(form.elements), len([x for x in form.query_selector_all('*') if x.tag in ['input', 'select', 'textarea']]))
 
 class InputTest(unittest.TestCase):
     def test_construct(self):
@@ -319,26 +318,26 @@ class InputTest(unittest.TestCase):
 
         # works with sets
         i.options.set_selected({'b','a'})
-        self.assertEqual(i.find('.//option', n=0).get('selected'), 'selected')
-        self.assertEqual(i.find('.//option', n=1).get('selected'), 'selected')
+        self.assertEqual(list(i.query_selector_all('option'))[0].get('selected'), 'selected')
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), 'selected')
         self.assertEqual(i.options.get_selected(), ['a','b'])
 
         # also works with lists
         i.options.set_selected(['a'])
-        self.assertEqual(i.find('.//option', n=0).get('selected'), 'selected')
-        self.assertEqual(i.find('.//option', n=1).get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[0].get('selected'), 'selected')
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), None)
         self.assertEqual(i.options.get_selected(), ['a'])
 
         # can individually select options
         i.options['b'].selected = True
-        self.assertEqual(i.find('.//option', n=1).get('selected'), 'selected')
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), 'selected')
 
         # and unselect them
         i.options['b'].selected = False
-        self.assertEqual(i.find('.//option', n=1).get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), None)
         # and unselect them again for code coverage masturbation
         i.options['b'].selected = False
-        self.assertEqual(i.find('.//option', n=1).get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), None)
         self.assertEqual(i.options['b'].selected, False)
 
         # bogus option accessors throw
@@ -347,8 +346,8 @@ class InputTest(unittest.TestCase):
 
         # can also clear select status
         i.options.set_selected(iter([]))
-        self.assertEqual(i.find('.//option', n=0).get('selected'), None)
-        self.assertEqual(i.find('.//option', n=1).get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[0].get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), None)
         self.assertEqual(i.options.get_selected(), [])
 
         # oh and btw we can also retrieve the number of options
@@ -356,8 +355,8 @@ class InputTest(unittest.TestCase):
 
         # and - rogue feature which doesn't type check - you can assign an option to value
         i.value = i.options[0]
-        self.assertEqual(i.find('.//option', n=0).get('selected'), 'selected')
-        self.assertEqual(i.find('.//option', n=1).get('selected'), None)
+        self.assertEqual(list(i.query_selector_all('option'))[0].get('selected'), 'selected')
+        self.assertEqual(list(i.query_selector_all('option'))[1].get('selected'), None)
         self.assertEqual(i.options.get_selected(), ['a'])
 
         # raises for invalid options
@@ -373,7 +372,7 @@ class FindFormTest(unittest.TestCase):
     def test_find_by_name_id(self):
         page = browser.open(TEST_SERVER + '/form.html')
         formname = page.forms['withaction']
-        formid = page.find(id='actionwith')
+        formid = page.query_selector('#actionwith')
         formsecond = page.forms[1]
 
         self.assertEqual(formname, formid)
@@ -382,7 +381,7 @@ class FindFormTest(unittest.TestCase):
         with self.assertRaises(IndexError):
             page.forms['alkfmwalkfmawlfawf']
 
-        self.assertEqual(len(page.forms), len(page.findall('.//form')))
+        self.assertEqual(len(page.forms), len(list(page.query_selector_all('form'))))
 
 class SubmitTest(unittest.TestCase):
     def test_formdata(self):
