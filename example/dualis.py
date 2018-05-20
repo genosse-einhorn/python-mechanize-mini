@@ -19,8 +19,8 @@ def main() -> None:
     page = form.submit()
 
     # check if login succeeded
-    if 'Eingegangene Nachrichten:' not in page.document.text_content:
-        raise Exception("Login Failed, page html="+page.document.outer_html)
+    if 'Eingegangene Nachrichten:' not in page.document_element.text_content:
+        raise Exception("Login Failed, page html="+page.document_element.outer_html)
 
     resultlink = page.query_selector('a:contains(Prüfungsergebnisse)')
     assert isinstance(resultlink, HtmlAnchorElement)

@@ -411,6 +411,15 @@ class TestConvenience(unittest.TestCase):
         el = mechanize_mini.parsefragmentstr('<p>bla <b><hr>blub    </b>\n<i>hola</p>')
         self.assertEqual(el.text_content, 'bla blub hola')
 
+    def test_inner_html(self):
+        el = mechanize_mini.HTML('<p>Hello <b>World</b></p>')
+        self.assertEqual(el.inner_html, 'Hello <b>World</b>')
+
+        el.inner_html = 'Goodbye <i>World</i>'
+        self.assertEqual(el.text, 'Goodbye ')
+        self.assertEqual(len(el), 1)
+        self.assertEqual(el.outer_xml, '<p>Goodbye <i>World</i></p>')
+
 class FindStuffTest(unittest.TestCase):
     def test_find_by_tag_name(self):
         test = mechanize_mini.parsefile(os.path.dirname(os.path.abspath(__file__)) + '/files/form.html')

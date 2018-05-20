@@ -25,7 +25,7 @@ class FormAccessorTest(unittest.TestCase):
         self.assertEqual(form.enctype, 'application/x-www-form-urlencoded')
 
         # form.action has a special default if the form's page is unset
-        form.page = None
+        form._backend = None
         self.assertEqual(form.action, '')
 
     def test_nondefaults(self):
@@ -427,9 +427,9 @@ class SubmitTest(unittest.TestCase):
                 </select>
             </form>
             """)
-        form.page = page
+        page.adopt_element(form)
         result = form.submit()
-        self.assertEqual(result.document.text,
+        self.assertEqual(result.document_element.text,
             'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
 
     def test_bogus_encoding(self):
@@ -439,9 +439,9 @@ class SubmitTest(unittest.TestCase):
                 <input type=text name=name value='Müßtérmañ'>
             </form>
             """)
-        form.page = page
+        page.adopt_element(form)
         result = form.submit()
-        self.assertEqual(result.document.text, 'name=Müßtérmañ\n')
+        self.assertEqual(result.document_element.text, 'name=Müßtérmañ\n')
 
     def test_encoding_without_page(self):
         form = HTML("""
@@ -469,9 +469,9 @@ class SubmitTest(unittest.TestCase):
                 </select>
             </form>
             """)
-        form.page = page
+        page.adopt_element(form)
         result = form.submit()
-        self.assertEqual(result.document.text,
+        self.assertEqual(result.document_element.text,
             'name=Müßtérmañ\nb=on\nbogustype=lala\nb=a\nb=c\n')
 
 if __name__ == '__main__':

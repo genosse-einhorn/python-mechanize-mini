@@ -12,11 +12,17 @@ from functools import partial
 from typing import List, Set, Dict, Tuple, Text, Optional, AnyStr, Union, Iterator, \
     IO, Sequence, Iterable, TypeVar, KeysView, ItemsView, cast, Callable, overload
 
+
 THtmlElement = TypeVar('THtmlElement', bound='HtmlElement')
 T = TypeVar('T')
 class HtmlElement(Sequence['HtmlElement']):
     """
     An HTML Element
+
+    .. note::
+
+        Every element is invisibly attached to a :any:`Document`. HTML Elements can only contain children
+        attached to the same :any:`Document`, and they cannot change the document they are attached to.
     """
 
     def __new__(cls, *args, **kwargs) -> 'HtmlElement':
@@ -42,16 +48,19 @@ class HtmlElement(Sequence['HtmlElement']):
 
         return super().__new__(cls)
 
-    def __init__(self, tag: str, attrib: Dict[str,str] = {}, **extra) -> None:
+    def __init__(self, tag: str, attrib: Dict[str,str] = {}, backend: '_DocumentBackend' = None) -> None:
         """
-        Create a new Element.
+        Construct a HTML element for internal use.
 
-        Note
-        ----
+        Warning
+        -------
 
-        The :code:`HtmlElement` class overrides :code:`__new__` to create the appropriate
-        element subclass, e.g. when you do :code:`HtmlElement('a')`, you will get a :any:`HtmlAnchorElement`
+        Do not use. Create new elements with :any:`Document.create_element`.
+
+        This function may be altered or removed at any time.
         """
+
+        self._backend = backend
 
         self.tag = tag # type: str
         """The element tag name (:any:`str`)"""
@@ -71,7 +80,6 @@ class HtmlElement(Sequence['HtmlElement']):
         This is always a :any:`str`.
         """
 
-        self.attrib.update(extra)
         self._children = [] # type: List[HtmlElement]
 
     def append(self, subelement: 'HtmlElement') -> None:
@@ -85,6 +93,8 @@ class HtmlElement(Sequence['HtmlElement']):
         '<ul><li>a</li><li>b</li><li>c</li></ul>'
 
         """
+        assert subelement._backend == self._backend
+
         self._children.append(subelement)
 
     def extend(self, elements: Iterable['HtmlElement']) -> None:
@@ -98,6 +108,7 @@ class HtmlElement(Sequence['HtmlElement']):
         '<ul><li>a</li><li>b</li><li>c</li><li>d</li></ul>'
         """
         for element in elements:
+            assert element._backend == self._backend
             self.append(element)
 
     def insert(self, index: int, subelement: 'HtmlElement') -> None:
@@ -110,6 +121,8 @@ class HtmlElement(Sequence['HtmlElement']):
         >>> el.outer_html
         '<ul><li>a</li><li>c</li><li>b</li></ul>'
         """
+        assert subelement._backend == self._backend
+
         self._children.insert(index, subelement)
 
     def remove(self, subelement: 'HtmlElement') -> None:
@@ -242,6 +255,14 @@ class HtmlElement(Sequence['HtmlElement']):
             l.append(html.escape(child.tail, quote=False))
 
         return ''.join(l)
+
+    @inner_html.setter
+    def inner_html(self, html: str) -> None:
+        htmlel = parsehtmlstr(html)
+        _assign_elements_to_backend(htmlel, self._backend)
+
+        self.text = htmlel.text
+        self._children = list(htmlel)
 
     @property
     def outer_html(self) -> str:
@@ -421,6 +442,13 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def __repr__(self) -> str:
         return '<{} {!r} at {:#x}>'.format(self.__class__.__name__, self.tag, id(self))
+
+def _assign_elements_to_backend(el: HtmlElement, backend: Optional['_DocumentBackend']) -> None:
+    assert el._backend is None
+
+    el._backend = backend
+    for sub in el:
+        _assign_elements_to_backend(sub, backend)
 
 ### CSS Selectors
 _TMatcher = Callable[[HtmlElement], bool]
@@ -904,18 +932,11 @@ class HtmlFormElement(HtmlElement):
 
         .. note::
 
-            You'll want to use :any:`Page.forms` instead
+            You'll want to use :any:`Document.forms` instead
 
         """
 
         super().__init__(*args, **kwargs)
-
-        self.page = None # type: Optional[Page]
-        """
-        The :any:`Page` which contains the form.
-        Might be :any:`None`, if the element was constructed outside of a
-        browser request.
-        """
 
     @property
     def name(self) -> Optional[str]:
@@ -930,18 +951,18 @@ class HtmlFormElement(HtmlElement):
         """
         Returns the form target, which is either the ``target`` attribute
         of the ``<form>`` element, or if the attribute is not present,
-        the url of the containing page (read-only).
+        the url of the containing document (read-only).
 
         If no target could be determined, then the return value is an empty string.
         """
         action = self.get('action') or ''
 
-        if self.page is not None:
+        if self._backend is not None:
             if action == '':
                 # HTML5 spec tells us NOT to use the base url
-                action = self.page.url
+                action = self._backend.response.geturl()
             else:
-                action = urljoin(self.page.base, action)
+                action = urljoin(self._backend.baseuri, action)
 
         return action
 
@@ -978,7 +999,7 @@ class HtmlFormElement(HtmlElement):
         """
         The encoding used to submit the form data
 
-        Can be specified with the ``accept-charset`` attribute, default is the page charset
+        Can be specified with the ``accept-charset`` attribute, default is the document charset
         """
         a = str(self.get('accept-charset') or '')
         if a != '':
@@ -987,8 +1008,8 @@ class HtmlFormElement(HtmlElement):
             except LookupError:
                 pass
 
-        if self.page is not None:
-            return self.page.charset
+        if self._backend is not None:
+            return self._backend.charset
 
         return 'utf-8' # best guess
 
@@ -1144,14 +1165,14 @@ class HtmlFormElement(HtmlElement):
         # TODO: multipart/form-data
         return self.get_formdata_query().encode('ascii')
 
-    def submit(self) -> 'Page':
-        assert self.page is not None # no chance of working otherwise
+    def submit(self) -> 'Document':
+        assert self._backend is not None # no chance of working otherwise
 
         if self.method == 'POST':
-            return self.page.open(self.action, data=self.get_formdata_bytes(),
+            return self._backend.open(self.action, data=self.get_formdata_bytes(),
                                   additional_headers={'Content-Type': self.enctype})
         else:
-            return self.page.open(urljoin(self.action, '?'+self.get_formdata_query()))
+            return self._backend.open(urljoin(self.action, '?'+self.get_formdata_query()))
 
 
 class HtmlAnchorElement(HtmlElement):
@@ -1162,11 +1183,6 @@ class HtmlAnchorElement(HtmlElement):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.page = None # type: Page
-        """
-        The :any:`Page` this hyperlink belongs to (if any)
-        """
-
     @property
     def href(self) -> str:
         """
@@ -1175,16 +1191,16 @@ class HtmlAnchorElement(HtmlElement):
         """
         return self.get('href') or ''
 
-    def follow(self) -> 'Page':
+    def follow(self) -> 'Document':
         """
-        Open the link and return the retrieved target :any:`Page`.
+        Open the link and return the retrieved target :any:`Document`.
         """
 
-        assert self.page is not None
+        assert self._backend is not None
 
-        return self.page.open(self.href)
+        return self._backend.open(self.href)
 
-    def click(self) -> 'Page':
+    def click(self) -> 'Document':
         """Alias for :any:`HtmlAnchorElement.follow`"""
         return self.follow()
 
@@ -1599,16 +1615,16 @@ class _NoHttpRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 class HTTPException(Exception):
     """
-    Raised when the requested page responds with HTTP code != 200
+    Raised when the requested resource responds with HTTP code != 200
     """
-    def __init__(self, code: int, page: 'Page') -> None:
+    def __init__(self, code: int, document: 'Document') -> None:
         super().__init__("HTTP/" + str(code))
 
         self.code = code # type: int
         """ The HTTP status code (integer) """
 
-        self.page = page # type: Page
-        """ The (parsed) response :any:`Page` """
+        self.document = document # type: Document
+        """ The (parsed) response :any:`Document` """
 
 class TooManyRedirectsException(HTTPException):
     """
@@ -1622,11 +1638,9 @@ class Browser:
     The Browser class is not very useful in itself, it only houses the cookie storage
     and default settings for individual requests.
 
-    .. note:: MiniMech strives to be as stateless as possible.
-        In contrast to e.g. :code:`WWW::Mechanize`, MiniMech will give you a
-        new :any:`Page` object for every page you open and every link you follow.
-
-        There is no such thing as a current page or a browser history.
+    .. note::
+        There is no such thing as a current page or a browser history, you'll get a
+        new :any:`Document` object for every page you open and every link you follow.
 
     """
 
@@ -1659,9 +1673,9 @@ class Browser:
         """
 
     def open(self, url: str, *, additional_headers: Dict[str, str] = {},
-             maximum_redirects: int = 10, data: bytes = None) -> 'Page':
+             maximum_redirects: int = 10, data: bytes = None) -> 'Document':
         """
-        Navigates to :code:`url` and returns a new :any:`Page` object.
+        Navigates to :code:`url` and returns a new :any:`Document` object.
 
         Parameters
         ----------
@@ -1690,10 +1704,10 @@ class Browser:
         -----
 
         *   Anything but a final HTTP/200 response will raise an :any:`HTTPException` (which will still
-            contain the parsed :any:`Page` object as :any:`HTTPException.page`).
+            contain the parsed :any:`Document` object as :any:`HTTPException.document`).
         *   Any response will be parsed as HTML, regardless of the given Content-Type.
             If the response is not actually HTML, this will not fail but the parsed HTML will be mostly garbage
-            (but you can use :any:`Page.response_bytes` to read the raw response).
+            (but you can use :any:`Document.response_bytes` to read the raw response).
 
         """
 
@@ -1711,7 +1725,7 @@ class Browser:
         except urllib.error.HTTPError as r:
             response = r
 
-        page = Page(self, response)
+        page = Document(self, response)
         redirect_to = None # type: Union[None, str]
         if (page.status in [301, 302, 303, 307]) and ('Location' in page.headers):
             # standard redirects
@@ -1726,9 +1740,9 @@ class Browser:
                 # referer change
                 additional_headers = {**additional_headers, 'Referer': urldefrag(page.url).url}
 
-        if ((page.status == 200) and not (page.document is None)):
+        if ((page.status == 200) and not (page.document_element is None)):
             # look for meta tag
-            for i in page.document.iter('meta'):
+            for i in page.document_element.iter('meta'):
                 h = str(i.get('http-equiv') or '')
                 c = str(i.get('content') or '')
                 match = re.fullmatch('\s*\d+\s*;\s*[uU][rR][lL]\s*=(.+)', c)
@@ -1749,13 +1763,41 @@ class Browser:
         else:
             raise HTTPException(page.status, page)
 
-class Page:
+class _DocumentBackend:
     """
-    Represents a retrieved HTML page.
+    Hidden backend for :any:`Document`
 
-    .. note:: You don't want to construct a :any:`Page` instance yourself.
+    This is so that all :any:`HtmlElement`s can contain a reference to the document without
+    introducing reference cycles.
+    """
+    def __init__(self, browser: Browser, response) -> None:
+        self.browser = browser # type: Browser
 
-        Get it from  :any:`Browser.open` or :any:`Page.open`.
+        self.response = response
+
+        self.response_bytes = response.read() # type: bytes
+
+        self.charset = detect_charset(self.response_bytes, response.headers.get_content_charset()) # type: str
+
+        self.baseuri = response.geturl()
+
+    def open(self, url: str, **kwargs) -> 'Document':
+        headers = { 'Referer': urldefrag(self.response.geturl()).url }
+        if ('additional_headers' in kwargs):
+            for header, val in kwargs['additional_headers'].items():
+                headers[header] = val
+
+        kwargs['additional_headers'] = headers
+
+        return self.browser.open(urljoin(self.baseuri, url), **kwargs)
+
+class Document:
+    """
+    Represents a retrieved HTML document.
+
+    .. note:: You don't want to construct a :any:`Document` instance yourself.
+
+        Get it from  :any:`Browser.open` or :any:`Document.open`.
 
     Arguments
     ---------
@@ -1768,48 +1810,64 @@ class Page:
     """
 
     def __init__(self, browser: Browser, response) -> None:
-        self.browser = browser
-        """ The :any:`Browser` used to open this page  """
+        self._backend = _DocumentBackend(browser, response)
 
-        self.status = response.getcode() # type: int
+        self.document_element = parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: HtmlElement
         """
-        The HTTP status code received for this page (integer, read-only)
+        The root node of the parsed html content (:any:`HtmlElement`)
         """
 
-        self.headers = response.info() # type: Dict[str, str]
+        base = self.url
+
+        bases = [x for x in self.document_element.query_selector_all('base') if x.get('href') is not None]
+        if len(bases) > 0:
+            base = urljoin(self.url, (bases[0].get('href') or '').strip())
+
+        self._backend.baseuri = urldefrag(base).url
+
+        self.adopt_element(self.document_element)
+
+    @property
+    def browser(self) -> Browser:
+        """ The :any:`Browser` used to open this document (read-only) """
+        return self._backend.browser
+
+    @property
+    def status(self) -> int:
         """
-        The HTTP headers received with this page
+        The HTTP status code received for this document (integer, read-only)
+        """
+        return self._backend.response.getcode()
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        """
+        The HTTP headers received with this document
 
         Note: This is a special kind of dictionary which is not case-sensitive
         """
+        return self._backend.response.info()
 
-        self.url = response.geturl() # type: str
-        """ The URL to this page (str, read-only)"""
+    @property
+    def url(self) -> str:
+        """ The URL to this document (str, read-only)"""
+        return self._backend.response.geturl()
 
-        self.response_bytes = response.read()
+    @property
+    def response_bytes(self) -> bytes:
         """ The raw http response content, as a bytes-like object. """
+        return self._backend.response_bytes
 
-        self.charset = detect_charset(self.response_bytes, response.headers.get_content_charset())
+    @property
+    def charset(self) -> str:
         """
-        The encoding used to decode the page (str).
+        The encoding used to decode the document (str).
 
         The encoding is determined by looking at the HTTP Content-Type header,
         byte order marks in the document and <meta> tags, and applying various
         rules as specified by WHATWG (e.g. treating ASCII as windows-1252).
         """
-
-        self.document = parsehtmlstr(str(self.response_bytes, self.charset, 'replace')) # type: HtmlElement
-        """
-        The parsed document (:any:`HtmlElement`)
-        """
-
-        # fixup form page backreferences
-        for f in self.forms:
-            f.page = self
-
-        # fixup hyperlink references
-        for a in self.query_selector_all('a'):
-            cast(HtmlAnchorElement, a).page = self
+        return self._backend.charset
 
     @property
     def baseuri(self) -> str:
@@ -1822,20 +1880,10 @@ class Page:
         .. note::
 
             This read-only property is calculated from the ``<base>`` tag(s) present
-            in the document. If you change the ``<base>`` tag in the :any:`Page.document`,
-            you will change this property, too.
+            in the document when the document was loaded. If you change the ``<base>`` tag
+            inside the HTML afterwards, this property will not reflect that.
         """
-
-        base = self.url
-
-        # NOTE: at the moment, the html parser cannot fail and will
-        # always return something. This is just defensive programming here
-        if not (self.document is None): # pragma: no branch
-            bases = [x for x in self.document.query_selector_all('base') if x.get('href') is not None]
-            if len(bases) > 0:
-                base = urljoin(self.url, (bases[0].get('href') or '').strip())
-
-        return urldefrag(base).url
+        return self._backend.baseuri
 
     @property
     def base(self) -> str:
@@ -1844,7 +1892,7 @@ class Page:
 
     @property
     def uri(self) -> str:
-        """ Alias for :any:`Page.url` (read-only str)"""
+        """ Alias for :any:`Document.url` (read-only str)"""
         return self.url
 
     def query_selector(self, sel: str) -> Optional[HtmlElement]:
@@ -1862,29 +1910,30 @@ class Page:
         See: :any:`HtmlElement.query_selector_all`
         """
         selector = _build_css_selector(lambda el: [el], sel)
-        yield from selector(self.document)
+        yield from selector(self.document_element)
 
     @property
     def forms(self) -> 'HtmlFormsCollection':
-        return HtmlFormsCollection(self.document.query_selector_all('form'))
+        return HtmlFormsCollection(self.document_element.query_selector_all('form'))
 
-    def open(self, url: str, **kwargs) -> 'Page':
+    def open(self, url: str, **kwargs) -> 'Document':
         """
-        Opens another page as if it was linked from the current page.
+        Opens another resource as if it was linked from the current document.
 
         Relative URLs are resolved properly, and a :code:`Referer` [sic] header
         is added (unless overriden in an ``additional_headers`` argument).
         All keyword arguments are forwarded to :any:`Browser.open`.
         """
+        return self._backend.open(url, **kwargs)
 
-        headers = { 'Referer': urldefrag(self.url).url }
-        if ('additional_headers' in kwargs):
-            for header, val in kwargs['additional_headers'].items():
-                headers[header] = val
+    def create_element(self, tag: str, attrib: Dict[str, str] = {}) -> HtmlElement:
+        return HtmlElement(tag, attrib, self._backend)
 
-        kwargs['additional_headers'] = headers
+    def adopt_element(self, el: HtmlElement) -> HtmlElement:
+        _assign_elements_to_backend(el, self._backend)
 
-        return self.browser.open(urljoin(self.baseuri, url), **kwargs)
+        return el
+
 
 class HtmlFormsCollection(Sequence[HtmlFormElement]):
     """
