@@ -19,6 +19,28 @@ class HtmlElement(Sequence['HtmlElement']):
     """
     An HTML Element
 
+    Data inside the :any:`HtmlElement` is stored similat to :any:`xml.etree.ElementTree.Element`:
+
+    * The text immediately following the start tag is saved in :any:`HtmlElement.text`
+    * The text immediately following the end tag is saved in :any:`HtmlElement.tail`
+    * All child elements are accessible by index or by iterating
+
+    Example
+    -------
+
+    >>> el = HTML('<p>Hey! <b>Was</b> geht <i>ab?</i>')
+    >>> el.text
+    'Hey! '
+    >>> len(el)
+    2
+    >>> el[0].text
+    'Was'
+    >>> el[0].tail
+    ' geht '
+    >>> for child in el: print(child.text)
+    Was
+    ab?
+
     .. note::
 
         Every element is invisibly attached to a :any:`Document`. HTML Elements can only contain children
@@ -66,18 +88,16 @@ class HtmlElement(Sequence['HtmlElement']):
         """The element tag name (:any:`str`)"""
 
         self.attrib = attrib.copy() # type: Dict[str,str]
-        """The element's attributes (dictionary str->str)"""
+        """The element's attributes (dictionary of :any:`str`, :any:`str`)"""
 
         self.text = '' # type: str
         """
-        Element text before the first subelement.
-        This is always a :any:`str`.
+        Element text before the first subelement (:any:`str`)
         """
 
         self.tail = '' # type: str
         """
-        Text after this element's end tag up until the next sibling tag.
-        This is always a :any:`str`.
+        Text after this element's end tag up until the next sibling tag (:any:`str`)
         """
 
         self._children = [] # type: List[HtmlElement]
@@ -156,7 +176,7 @@ class HtmlElement(Sequence['HtmlElement']):
 
     def set(self, key: str, value: str) -> None:
         """
-        Set an attribute
+        Set an attribute value
         """
         self.attrib[key] = value
 
@@ -182,7 +202,7 @@ class HtmlElement(Sequence['HtmlElement']):
     def iter(self, tag:str=None) -> Iterator['HtmlElement']:
         """
         Returns an iterator over the current element and all its descendants
-        which have the given tag (or any tag, if :code:`tag` is :any:`None`.
+        which have the given tag (or any tag, if :code:`tag` is :any:`None`).
         """
         if tag is None or self.tag == tag:
             yield self
@@ -238,7 +258,8 @@ class HtmlElement(Sequence['HtmlElement']):
     @property
     def inner_html(self) -> str:
         """
-        Serialize the elements content to valid HTML code
+        The elements contents as HTML code (read-write, you can replace the elements
+        content this way)
 
         Example
         -------
@@ -247,6 +268,9 @@ class HtmlElement(Sequence['HtmlElement']):
         >>> el = HTML('<ul id=foo><li>hey<li>ho')
         >>> el.inner_html
         '<li>hey</li><li>ho</li>'
+        >>> el[0].inner_html = '<i>huhu'
+        >>> el.inner_html
+        '<li><i>huhu</i></li><li>ho</li>'
         """
         l = [html.escape(self.text, quote=False)] # type: List[str]
 
@@ -267,7 +291,7 @@ class HtmlElement(Sequence['HtmlElement']):
     @property
     def outer_html(self) -> str:
         """
-        Serialize the element to valid HTML code
+        The element as valid HTML code (read-only)
 
         Example
         -------
@@ -303,7 +327,7 @@ class HtmlElement(Sequence['HtmlElement']):
     @property
     def inner_xml(self) -> str:
         """
-        Serialize the elements content to valid XHTML code
+        The elements content as valid XHTML code (read-only)
 
         Example
         -------
@@ -324,7 +348,7 @@ class HtmlElement(Sequence['HtmlElement']):
     @property
     def outer_xml(self) -> str:
         """
-        Serialize the element to valid XHTML code
+        The element as valid XHTML code (read-only)
 
         Example
         -------
@@ -359,7 +383,7 @@ class HtmlElement(Sequence['HtmlElement']):
     @property
     def id(self) -> Optional[str]:
         """
-        Represents the ``id`` attribute on the element, or None if
+        Represents the ``id`` attribute on the element, or :any:`None` if
         the attribute is not present
         """
         return self.get('id')
@@ -951,7 +975,7 @@ class HtmlFormElement(HtmlElement):
         """
         Returns the form target, which is either the ``target`` attribute
         of the ``<form>`` element, or if the attribute is not present,
-        the url of the containing document (read-only).
+        the url of the containing document (read-only, use :any:`HtmlElement.set` to change it).
 
         If no target could be determined, then the return value is an empty string.
         """
@@ -969,7 +993,7 @@ class HtmlFormElement(HtmlElement):
     @property
     def method(self) -> str:
         """
-        The forms submit method, which is ``GET`` or ``POST``.
+        The forms submit method, which is ``GET`` or ``POST`` (read-only, use :any:`HtmlElement.set` to change it).
 
         The ``method`` attribute of the ``<form>`` element specifies this,
         the default if this attribute is missing or malformed is ``GET``.
@@ -983,7 +1007,7 @@ class HtmlFormElement(HtmlElement):
     @property
     def enctype(self) -> str:
         """
-        The MIME type for submitted form data.
+        The MIME type for submitted form data (read-only).
 
         Currently, this is hardcoded to ``application/x-www-form-urlencoded``
         because it is the only supported format.
@@ -997,9 +1021,9 @@ class HtmlFormElement(HtmlElement):
     @property
     def accept_charset(self) -> str:
         """
-        The encoding used to submit the form data
+        The encoding used to submit the form data (read-only, use :any:`HtmlElement.set` to change it).
 
-        Can be specified with the ``accept-charset`` attribute, default is the document charset
+        Can be specified with the ``accept-charset`` attribute, default is the document charset.
         """
         a = str(self.get('accept-charset') or '')
         if a != '':
@@ -1016,7 +1040,7 @@ class HtmlFormElement(HtmlElement):
     @property
     def elements(self) -> HtmlInputCollection:
         """
-        The elements contained in the form as :any:`HtmlInputCollection`.
+        The elements contained in the form as :any:`HtmlInputCollection` (read-only).
         """
         return HtmlInputCollection(x for x in self.iter() if isinstance(x, HtmlInputElement))
 
@@ -1084,12 +1108,11 @@ class HtmlFormElement(HtmlElement):
         ------
 
         UnsupportedFormError
-            * There is more than one input element with the same name (and they
-              are not all radio buttons)
-            * There is no radio button with the given value
-            * There is no option with the given value in a ``<select>`` element.
-            * The input element is a checkbox (if you really want to change the
-              value attribute of a checkbox, use :any:`HtmlInputElement.value`).
+            There is more than one input element with the same name (and they are not all
+            radio buttons), or there is no radio button with the given value among the
+            radio buttons with the given name, or there is no option with the given value
+            in a ``<select>`` element with the given name, or the input element is a checkbox.
+            (if you really want to change the value attribute of a checkbox, use :any:`HtmlInputElement.value`).
 
         InputNotFoundError
             if no input element with the given name exists
@@ -1152,7 +1175,7 @@ class HtmlFormElement(HtmlElement):
 
     def get_formdata_query(self) -> str:
         """
-        Get the query string (for submitting via GET)
+        Builds the query string (for submitting via GET)
         """
         # TODO: throw if multipart/form-data
         charset = self.accept_charset
@@ -1166,6 +1189,9 @@ class HtmlFormElement(HtmlElement):
         return self.get_formdata_query().encode('ascii')
 
     def submit(self) -> 'Document':
+        """
+        Submits the form and returns the retrieved response (:any:`Document`).
+        """
         assert self._backend is not None # no chance of working otherwise
 
         if self.method == 'POST':
@@ -1177,7 +1203,7 @@ class HtmlFormElement(HtmlElement):
 
 class HtmlAnchorElement(HtmlElement):
     """
-    An <a> element
+    An ``<a>`` element
     """
 
     def __init__(self, *args, **kwargs):
@@ -1186,14 +1212,20 @@ class HtmlAnchorElement(HtmlElement):
     @property
     def href(self) -> str:
         """
-        the link target as given by the 'href' attribute, or possibly
-        an empty string if the href attribute is missing (read-only)
+        The link target as given by the ``href`` attribute, or possibly
+        an empty string if the ``href`` attribute is missing (read-only)
         """
         return self.get('href') or ''
 
     def follow(self) -> 'Document':
         """
         Open the link and return the retrieved target :any:`Document`.
+
+        .. note::
+            The element must be attached to a :any:`Document` for this to work. If the link has been
+            retrieved as part of a document, or created with :any:`Document.create_element`,
+            this is already the case. If the link element was created using the :any:`HTML` function,
+            you will have to attach it first using :any:`Document.adopt_element`.
         """
 
         assert self._backend is not None
@@ -1605,7 +1637,23 @@ def parsehtmlbytes(html: bytes, charset:str = None) -> HtmlElement:
 
 def HTML(text: str) -> HtmlElement:
     """
-    Parses a HTML fragment from a string constant. This function can be used to embed "HTML literals" in Python code
+    Parses a HTML fragment from a string constant. This function can be used to embed "HTML literals" in Python code.
+
+    The returned element will not be attached to any document. Before you insert it into an element
+    tree, it must be attached to the document with :any:`Document.adopt_element`.
+
+    If the given fragment parses to just one element, this element
+    is returned. If it parses to multiple sibling elements, a wrapping
+    ``<html>`` element will be returned.
+
+    Example
+    -------
+
+    >>> from mechanize_mini import HTML
+    >>> el = HTML('<p>Hello World!')
+    >>> el.outer_html
+    '<p>Hello World!</p>'
+
     """
     return parsefragmentstr(text)
 
@@ -1621,7 +1669,7 @@ class HTTPException(Exception):
         super().__init__("HTTP/" + str(code))
 
         self.code = code # type: int
-        """ The HTTP status code (integer) """
+        """ The HTTP status code (:any:`int`) """
 
         self.document = document # type: Document
         """ The (parsed) response :any:`Document` """
@@ -1835,37 +1883,38 @@ class Document:
     @property
     def status(self) -> int:
         """
-        The HTTP status code received for this document (integer, read-only)
+        The HTTP status code received for this document (:any:`int`, read-only)
         """
         return self._backend.response.getcode()
 
     @property
     def headers(self) -> Dict[str, str]:
         """
-        The HTTP headers received with this document
+        The HTTP headers received with this document (dictionary of :any:`str`,:any:`str`)
 
-        Note: This is a special kind of dictionary which is not case-sensitive
+        .. note::
+            This is a special kind of dictionary where keys are case-insensitive
         """
         return self._backend.response.info()
 
     @property
     def url(self) -> str:
-        """ The URL to this document (str, read-only)"""
+        """ The URL to this document (:any:`str`, read-only)"""
         return self._backend.response.geturl()
 
     @property
     def response_bytes(self) -> bytes:
-        """ The raw http response content, as a bytes-like object. """
+        """ The raw HTTP response content, as a :any:`bytes`-like object. """
         return self._backend.response_bytes
 
     @property
     def charset(self) -> str:
         """
-        The encoding used to decode the document (str).
+        The encoding used to decode the document (:any:`str`).
 
-        The encoding is determined by looking at the HTTP Content-Type header,
-        byte order marks in the document and <meta> tags, and applying various
-        rules as specified by WHATWG (e.g. treating ASCII as windows-1252).
+        The encoding is determined by looking at the HTTP ``Content-Type`` header,
+        byte order marks in the document, ``<meta>`` tags, and by applying various
+        rules as specified by WHATWG (e.g. treating ASCII as ``windows-1252``).
         """
         return self._backend.charset
 
@@ -1897,7 +1946,7 @@ class Document:
 
     def query_selector(self, sel: str) -> Optional[HtmlElement]:
         """
-        First element matching the selector, or :any:`None`.
+        First element matching the given CSS selector, or :any:`None`.
 
         See: :any:`HtmlElement.query_selector`
         """
@@ -1914,6 +1963,9 @@ class Document:
 
     @property
     def forms(self) -> 'HtmlFormsCollection':
+        """
+        The ``<form>`` elements contained in the document, as :any:`HtmlFormsCollection`
+        """
         return HtmlFormsCollection(self.document_element.query_selector_all('form'))
 
     def open(self, url: str, **kwargs) -> 'Document':
@@ -1927,9 +1979,23 @@ class Document:
         return self._backend.open(url, **kwargs)
 
     def create_element(self, tag: str, attrib: Dict[str, str] = {}) -> HtmlElement:
+        """
+        Create a new :any:`HtmlElement` with the given tag and attributes.
+
+        The element will be already attachted to this document, but is not (yet) part of the
+        element tree (:any:`Document.document_element`).
+        """
+
         return HtmlElement(tag, attrib, self._backend)
 
     def adopt_element(self, el: HtmlElement) -> HtmlElement:
+        """
+        Attaches the given :any:`HtmlElement` to this document. Elements need to be attached to
+        the document before they can be inserted into the element tree.
+
+        You can only attach elements which are not already attached to another document.
+        """
+
         _assign_elements_to_backend(el, self._backend)
 
         return el
