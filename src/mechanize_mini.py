@@ -87,8 +87,11 @@ class HtmlElement(Sequence['HtmlElement']):
         self.tag = tag # type: str
         """The element tag name (:any:`str`)"""
 
-        self.attrib = attrib.copy() # type: Dict[str,str]
+        self.attrib = {} # type: Dict[str,str]
         """The element's attributes (dictionary of :any:`str`, :any:`str`)"""
+
+        for key, val in attrib.items():
+            self.attrib[key.casefold()] = val
 
         self.text = '' # type: str
         """
@@ -172,13 +175,13 @@ class HtmlElement(Sequence['HtmlElement']):
         >>> el.get('data-foo', 'bar')
         'bar'
         """
-        return self.attrib.get(key, default)
+        return self.attrib.get(key.casefold(), default)
 
     def set(self, key: str, value: str) -> None:
         """
         Set an attribute value
         """
-        self.attrib[key] = value
+        self.attrib[key.casefold()] = value
 
     def keys(self) -> KeysView[str]:
         """
@@ -523,7 +526,7 @@ def _matcher_and(a: Optional[_TMatcher], b: _TMatcher) -> _TMatcher:
     else: return b
 
 def _matcher_tagname(tag: str) -> _TMatcher:
-    return lambda el: el.tag == tag
+    return lambda el: el.tag.casefold() == tag.casefold()
 def _matcher_class(classname: str) -> _TMatcher:
     return lambda el: classname in el.class_list
 def _matcher_id(id: str) -> _TMatcher:
