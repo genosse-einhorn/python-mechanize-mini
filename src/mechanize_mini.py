@@ -1560,6 +1560,12 @@ def detect_charset(html: bytes, charset: str = None) -> str:
         charset = parser.charset
 
     if charset is None:
+        # check for XML declaration
+        match = re.match(rb'''<\?xml[ \t\r\n]+version=(['"])1.0\1[ \t\r\n]+encoding=(['"])(?P<enc>[a-zA-Z0-9_\-]+)\2''', html)
+        if match is not None:
+            charset = str(match['enc'], 'ascii', 'replace')
+
+    if charset is None:
         # default: windows-1252
         charset = 'cp1252'
 

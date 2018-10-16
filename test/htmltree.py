@@ -353,6 +353,12 @@ class TestCharsetDetection(XmlEquivTest):
         # yes, even if utf-8 characters are inside we still default to cp1252
         self.assertCodecEqual(mechanize_mini.detect_charset('blabläáßð«»'.encode('utf8')), 'cp1252')
 
+    def test_xml_declaration(self):
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<?xml version="1.0" encoding="UTF-8" ?>'), 'utf8')
+
+        # but meta tag overrides it
+        self.assertCodecEqual(mechanize_mini.detect_charset(b'<?xml version="1.0" encoding="UTF-8" ?><meta charset=iso-8859-15>'), 'iso-8859-15')
+
     def test_bom(self):
         # various utf trickeries
 
